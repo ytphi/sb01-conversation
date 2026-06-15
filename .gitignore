@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Environment / secrets
+.env
+
+# Unitree SDK (large, install separately)
+unitree_sdk2_python/
+
+# Personal memory data — do NOT commit face photos or conversation history
+memory/faces/
+memory/profiles/
+memory/sessions/
+
+# Teleoperation / GMR scripts (separate from conversation demo)
+scripts/teleop_session.py
+scripts/train_gmr.py
+scripts/adapter.py
+scripts/check_robot.py
+scripts/bvh_to_g1.py
+scripts/fbx_to_g1.py
+scripts/qtm_bvh_to_g1.py
+scripts/vis_episode.py
+scripts/robot.yaml
+teleop/gmr/
+teleop/gmr.py
+teleop/gmr_retarget.py
+teleop/qtm_stream.py
+teleop/retarget.py
+teleop/robot_control.py
+teleop/live_viewer.py
+
+# Recorded episodes
+record/
+
+# Editor / OS
+.DS_Store
+*.swp
