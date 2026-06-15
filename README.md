@@ -4,14 +4,134 @@ A voice-driven conversation system for the **Unitree G1 humanoid robot** (nickna
 
 ---
 
+## Quick Start
+
+### Step 1 — Get an Anthropic API key
+
+Go to [console.anthropic.com](https://console.anthropic.com), create a free account, and generate an API key.
+
+---
+
+### Step 2 — Prepare your computer
+
+| Your OS | What to do |
+|---|---|
+| **Ubuntu / Debian** | You're ready. Go to Step 3. |
+| **Mac** | Install [Homebrew](https://brew.sh) if you don't have it. Go to Step 3. |
+| **Windows** | Install WSL2 first (see below), then follow the Ubuntu steps. |
+
+**Windows → WSL2 setup (one time):**
+Open PowerShell as Administrator and run:
+```powershell
+wsl --install
+```
+Reboot when prompted. This gives you Ubuntu inside Windows. Open the **Ubuntu** app and continue from there.
+
+---
+
+### Step 3 — Clone and run setup
+
+```bash
+git clone https://github.com/ytphi/sb01-conversation.git
+cd sb01-conversation
+bash setup.sh
+```
+
+`setup.sh` will automatically:
+- Install system dependencies (`cmake`, `ffmpeg`, etc.)
+- Clone and install the Unitree Python SDK
+- Install all Python packages (`anthropic`, `edge-tts`, `face_recognition`, etc.)
+- Create your `.env` file
+
+---
+
+### Step 4 — Add your API key
+
+Open the `.env` file that was created:
+```bash
+nano .env
+```
+Replace the placeholder with your real key:
+```
+ANTHROPIC_API_KEY=sk-ant-...your-key-here...
+```
+Save and close (`Ctrl+X`, then `Y`).
+
+---
+
+### Step 5 — (Optional) Enroll your face
+
+So the robot can recognize and greet you by name:
+```bash
+python3 scripts/enroll_face.py YourName
+```
+Look at the camera and press **Space** to capture. Your photo is saved to `memory/faces/`.
+
+---
+
+### Step 6 — Connect and run
+
+Plug an Ethernet cable from your laptop into the G1. Then:
+
+```bash
+# Ubuntu / WSL2
+python3 scripts/sb01_conversation.py eno0
+
+# Mac
+python3 scripts/sb01_conversation.py en0
+```
+
+The robot will greet you and start listening. Press `Ctrl+C` to stop — it will save a summary of the conversation automatically.
+
+---
+
+## How It Works
+
+```
+G1 ASR (DDS) ──▶ sb01_conversation.py ──▶ Claude API ──▶ Edge TTS ──▶ G1 speaker
+                          │
+                 face_id + memory_manager
+                 (who is this? what do I know?)
+```
+
+1. **ASR callback** — receives speech transcripts from the G1 over DDS (`rt/audio_msg`)
+2. **Emotion detection** — reads the `<|HAPPY|>` / `<|SAD|>` tag embedded in the ASR message and sets the chest LED color
+3. **Claude query** — builds a system prompt with the person's memory + web context, sends the full conversation history
+4. **TTS** — converts Claude's reply to PCM audio via Edge TTS and streams it to the G1 speaker
+5. **Session save** — on shutdown (`Ctrl+C`), asks Claude to summarize the conversation and extract new facts about the user
+
+---
+
 ## Features
 
-- **Voice conversation** — listens over DDS (`rt/audio_msg`), replies over TTS with automatic language detection (English / Spanish)
-- **Emotion-aware LEDs** — chest LED color reflects the detected speaker emotion (happy → yellow, sad → purple, angry → red)
-- **Face recognition at startup** — identifies known people and loads their memory profile so the robot remembers them across sessions
-- **Persistent memory** — per-person facts and session summaries are saved to disk and injected into the system prompt on the next visit
-- **Weather lookups** — automatically calls `wttr.in` when a weather question is detected
-- **Web context preloading** — fetches the CSUSB homepage and SDK docs at startup so the robot can answer campus questions
+- **Voice conversation** — listens over DDS, replies with natural speech
+- **Emotion-aware LEDs** — chest LED color reflects detected speaker emotion (happy → yellow, sad → purple, angry → red)
+- **Face recognition at startup** — identifies known people and loads their memory profile
+- **Persistent memory** — per-person facts and session summaries are saved across sessions
+- **Weather lookups** — automatically queries `wttr.in` when a weather question is detected
+- **Multilingual TTS** — auto-detects English vs. Spanish and picks the right voice
+
+---
+
+## Project Structure
+
+```
+setup.sh                   ← run this first
+.env.example               ← copy to .env and add your API key
+
+scripts/
+├── sb01_conversation.py   ← main conversation loop
+└── enroll_face.py         ← register a face for recognition
+
+teleop/
+├── face_id.py             ← camera-based face recognition
+└── memory_manager.py      ← per-person profiles & session summaries
+
+memory/
+├── faces/                 ← put face photos here (name.jpg)
+├── profiles/              ← auto-generated, gitignored
+└── sessions/              ← auto-generated, gitignored
+```
 
 ---
 
@@ -19,130 +139,50 @@ A voice-driven conversation system for the **Unitree G1 humanoid robot** (nickna
 
 | Interface | Role |
 |---|---|
-| `eno0` (Ethernet, `192.168.123.222`) | DDS — ASR messages in, TTS / LED commands out |
+| `eno0` (Ethernet, `192.168.123.222`) | DDS — ASR in, TTS / LED out |
 | `wlp0s20f3` (WiFi) | Claude API + weather / web fetches |
 
-The G1 runs [Unitree SDK2](https://github.com/unitreerobotics/unitree_sdk2_python) for DDS communication.
-
----
-
-## Project Structure
-
-```
-scripts/
-└── sb01_conversation.py   # main conversation loop
-
-teleop/
-├── face_id.py             # camera-based face recognition at startup
-└── memory_manager.py      # per-person profiles & session summaries
-
-memory/
-├── faces/                 # enroll face photos here  (one .jpg per person, filename = name)
-├── profiles/              # auto-generated JSON profiles  (gitignored)
-└── sessions/              # auto-generated session summaries  (gitignored)
-```
-
----
-
-## Setup
-
-### 1. Clone and install dependencies
-
-```bash
-git clone https://github.com/ytphi/sb01-conversation.git
-cd sb01-conversation
-pip install anthropic edge-tts pydub opencv-python face_recognition
-```
-
-You also need the Unitree Python SDK (not included here — install separately):
-
-```bash
-pip install cyclonedds==0.10.2
-# then follow https://github.com/unitreerobotics/unitree_sdk2_python
-```
-
-### 2. Set your API key
-
-```bash
-cp .env.example .env
-# edit .env and paste your Anthropic API key
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-> Get a free API key at [console.anthropic.com](https://console.anthropic.com)
-
-### 3. Enroll faces (optional)
-
-Drop a `.jpg` photo of each person into `memory/faces/`, named after them:
-
-```
-memory/faces/alice.jpg
-memory/faces/bob.jpg
-```
-
-The robot will recognize them at startup and greet them by name.
-
-### 4. Run
-
-```bash
-python3 scripts/sb01_conversation.py
-# or specify the network interface explicitly:
-python3 scripts/sb01_conversation.py eno0
-```
-
-The robot will:
-1. Scan the camera for a known face
-2. Say a greeting
-3. Listen and respond continuously until `Ctrl-C`
-4. Save a session summary on exit
-
----
-
-## How It Works
-
-```
-G1 ASR (DDS) → sb01_conversation.py → Claude API → Edge TTS → G1 speaker
-                        ↑
-              face_id + memory_manager
-              (who is this? what do I know?)
-```
-
-1. **ASR callback** — receives partial and final transcripts from `rt/audio_msg`
-2. **Emotion detection** — parses the `<|HAPPY|>` / `<|SAD|>` tag embedded in the ASR message
-3. **Claude query** — builds a system prompt with the person's memory + web context, sends the conversation history
-4. **TTS** — converts Claude's reply to PCM audio via Edge TTS and streams it to the G1's speaker
-5. **Session save** — on shutdown, asks Claude to summarize the conversation and extract new facts
+The G1 uses [Unitree SDK2](https://github.com/unitreerobotics/unitree_sdk2_python) for DDS communication. `setup.sh` installs this for you.
 
 ---
 
 ## Customizing the Persona
 
-Edit `BASE_SYSTEM_PROMPT` in `sb01_conversation.py` to change the robot's name, personality, or instructions.
+Edit `BASE_SYSTEM_PROMPT` near the top of `scripts/sb01_conversation.py` to change the robot's name, personality, or instructions.
 
 ---
 
-## Dependencies
+## Troubleshooting
 
-| Package | Purpose |
-|---|---|
-| `anthropic` | Claude API client |
-| `edge-tts` | free Microsoft TTS (no key needed) |
-| `pydub` | MP3 → PCM conversion |
-| `opencv-python` | camera capture for face recognition |
-| `face_recognition` | face encoding and matching |
-| `cyclonedds==0.10.2` | DDS transport (required by Unitree SDK) |
+**`face_recognition` install fails on Apple Silicon (M1/M2/M3)**
+```bash
+conda install -c conda-forge dlib
+pip install face_recognition
+```
+
+**`No module named 'unitree_sdk2py'`**
+Re-run `bash setup.sh` — the SDK install may have been skipped.
+
+**Robot not responding to speech**
+- Check that `eno0` is the right interface: run `ip link` (Linux) or `ifconfig` (Mac)
+- Make sure the Ethernet cable is connected and the G1 is powered on
+
+**`ANTHROPIC_API_KEY` error at startup**
+Make sure `.env` exists and contains your key, then re-export it:
+```bash
+export ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY .env | cut -d= -f2)
+```
 
 ---
 
 ## Notes for Students
 
-- **Never commit your `.env` file or API key.** The `.gitignore` already excludes `.env`.
-- The `memory/faces/` folder is also gitignored — face photos are personal data.
-- If you don't have a Unitree G1, you can still study the conversation logic; the DDS subscriber will simply not receive any messages.
-- Chinese TTS (`VOICE_ZH`) is commented out in the code but easy to re-enable.
+- **Never commit your `.env` file.** It contains your private API key. The `.gitignore` already excludes it.
+- The `memory/faces/` folder is also gitignored — face photos are personal data, don't share them.
+- If you don't have a G1, you can still read and modify the conversation logic — the DDS subscriber simply won't receive messages without the robot.
 
 ---
 
 ## Course Context
 
-This project was developed as part of the robotics program at **CSUSB** under the supervision of **Prof. Yutong Liu**. It demonstrates real-time LLM integration on an embedded humanoid platform.
+Developed as part of the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. Demonstrates real-time LLM integration on an embedded humanoid platform.
