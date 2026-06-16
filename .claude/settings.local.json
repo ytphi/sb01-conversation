@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.qualisys.com)",
+      "WebFetch(domain:cdn-content.qualisys.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:omniretarget.github.io)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(//home/aloha/datasets/raw/fbx_121625_binary/**)",
+      "Bash(mkdir -p /home/aloha/datasets/raw/bvh_121625)",
+      "Bash(blender --background --python /dev/stdin)",
+      "Read(//home/aloha/datasets/raw/bvh_121625/**)",
+      "Bash(python3 scripts/fbx_to_g1.py /home/aloha/datasets/raw/fbx_121625_binary/Rev_Idle01.fbx --out-dir /home/aloha/datasets/processed/g1_121625 --no-viz)",
+      "Read(//home/aloha/datasets/raw/bvh/**)",
+      "Read(//home/**)"
+    ]
+  }
+}

@@ -4,6 +4,12 @@ A voice-driven conversation system for the **Unitree G1 humanoid robot** (nickna
 
 ---
 
+## Demo
+
+[![SB01 Demo](https://img.youtube.com/vi/R4tsqcWj8_U/0.jpg)](https://youtu.be/R4tsqcWj8_U?si=sJ4VN0mgyzGZyRys)
+
+---
+
 ## Quick Start
 
 ### Step 1 — Get an Anthropic API key

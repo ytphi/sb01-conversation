@@ -1,0 +1,15 @@
+robot:
+  ip: "192.168.123.1"       # G1 default; change if different
+  network_interface: "eno0" # interface connected to G1; check with `ip link`
+  control_freq: 100         # Hz
+  dof: 29                   # confirmed 29-DOF G1 U2
+
+qtm:
+  ip: "192.168.x.x"         # fill in when at lab
+  port: 22222
+  skeleton_name: "Actor1"   # name assigned in QTM skeleton setup
+
+recording:
+  save_dir: "./episodes"
+  obs_image: true           # G1 head camera
+  image_size: [640, 480]

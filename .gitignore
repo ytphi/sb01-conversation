@@ -8,6 +8,7 @@ venv/
 
 # Environment / secrets
 .env
+env
 
 # Unitree SDK (large, install separately)
 unitree_sdk2_python/

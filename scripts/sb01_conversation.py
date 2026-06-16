@@ -18,6 +18,17 @@ Usage:
 
 import sys
 import os
+
+# Load .env / env file from the project root so ANTHROPIC_API_KEY is available
+# without needing to `source env` manually before running the script.
+_env_file = os.path.join(os.path.dirname(__file__), "..", "env")
+if os.path.isfile(_env_file):
+    with open(_env_file) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                os.environ[_k.strip()] = _v.strip()
 import io
 import re
 import json
