@@ -1,6 +1,6 @@
 # SB01 — Unitree G1 Conversation 
 
-A voice-driven conversation system for the **Unitree G1 humanoid robot** (nicknamed *sb01*), built at **California State University, San Bernardino (CSUSB)**. The robot listens via its onboard ASR, reasons with Claude (Anthropic), and speaks back using Edge TTS — all in real time. It also uses **face recognition** to identify known people at startup and load their personal memory profile.
+A voice-driven conversation system for the **Unitree G1 humanoid robot** (nicknamed *sb01*), developed at **California State University, San Bernardino (CSUSB)**. The robot listens via its onboard ASR, reasons with Claude (Anthropic), and speaks back using Edge TTS — all in real time. It also uses **face recognition** to identify known people at startup and load their personal memory profile.
 
 ---
 
