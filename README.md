@@ -1,6 +1,22 @@
-# SB01 — Unitree G1 Conversation 
+# SB01 — Unitree G1 Conversation — Security Track (IST 5930)
 
 A voice-driven conversation system for the **Unitree G1 humanoid robot** (nicknamed *sb01*), developed at **California State University, San Bernardino (CSUSB)**. The robot listens via its onboard ASR, reasons with Claude (Anthropic), and speaks back using Edge TTS — all in real time. It also uses **face recognition** to identify known people at startup and load their personal memory profile.
+
+---
+
+## Security Track Focus — IST 5930
+
+This branch is for the **Security** track. Your focus: **network monitoring** for the G1's control network. The G1 communicates over DDS on `eno0` (`192.168.123.222`), separate from the WiFi interface (`wlp0s20f3`) used for internet/API calls — that separation is your monitoring boundary.
+
+Class setup: router and port configuration for this track is done in **CGI-112**, where you'll build a **dashboard viewer** for network traffic on the G1's network.
+
+Suggested workflow:
+1. Get familiar with the network topology: DDS traffic on `eno0`, WiFi/API traffic on `wlp0s20f3` (see the Hardware & Network section below and `CLAUDE.md`).
+2. Set up monitoring (packet capture / flow logging) on the router/port assigned to your team in CGI-112.
+3. Build a dashboard that visualizes live traffic (DDS topic activity, bandwidth, connected hosts, anomalies).
+4. Document findings — unexpected traffic, open ports, unencrypted channels — as part of a security assessment.
+
+**Deliverable:** a working network dashboard plus a short write-up of the G1 network's security posture and any risks identified.
 
 ---
 
@@ -193,4 +209,4 @@ export ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY .env | cut -d= -f2)
 
 ## Course Context
 
-Developed as part of the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. Demonstrates real-time LLM integration on an embedded humanoid platform.
+Developed as part of **IST 5930 (Fall 2026)** and the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. This branch supports the **Security** track — network monitoring and dashboarding for the G1's control network. Demonstrates real-time LLM integration on an embedded humanoid platform.
