@@ -1,6 +1,20 @@
-# SB01 — Unitree G1 Conversation 
+# SB01 — Unitree G1 Conversation — Engineering Track (IST 5930)
 
 A voice-driven conversation system for the **Unitree G1 humanoid robot** (nicknamed *sb01*), developed at **California State University, San Bernardino (CSUSB)**. The robot listens via its onboard ASR, reasons with Claude (Anthropic), and speaks back using Edge TTS — all in real time. It also uses **face recognition** to identify known people at startup and load their personal memory profile.
+
+---
+
+## Engineering Track Focus — IST 5930
+
+This branch is for the **Engineering** track. Your focus: **Unitree SDK and hardware integration** — getting the G1's sensors and actuators talking to real software over DDS, and wiring in LLM-based behavior. This repo's existing conversation loop is your reference implementation, not the finish line.
+
+Areas to dig into:
+- **Unitree SDK2** (Python/C++) — DDS pub/sub patterns, joint control, low-level state (`unitree_hg` IDLs)
+- **Cameras** — onboard camera capture and processing (face recognition is already wired up in `teleop/face_id.py`)
+- **Speakers / audio** — TTS playback and ASR ingestion via `AudioClient` (see `scripts/sb01_conversation.py`)
+- **LLM integration** — extend the Claude + edge-tts loop with new tools, behaviors, or lower-latency pipelines
+
+**Deliverable:** a working extension or new feature on the G1 (new sensor integration, new LLM-driven behavior, improved audio/video pipeline, etc.), demonstrated live or on video.
 
 ---
 
@@ -193,4 +207,4 @@ export ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY .env | cut -d= -f2)
 
 ## Course Context
 
-Developed as part of the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. Demonstrates real-time LLM integration on an embedded humanoid platform.
+Developed as part of **IST 5930 (Fall 2026)** and the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. This branch supports the **Engineering** track — Unitree SDK, hardware integration, and LLM integration. Demonstrates real-time LLM integration on an embedded humanoid platform.
