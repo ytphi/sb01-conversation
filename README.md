@@ -1,6 +1,20 @@
-# SB01 — Unitree G1 Conversation 
+# SB01 — Unitree G1 Conversation — Research Track (IST 5930)
 
 A voice-driven conversation system for the **Unitree G1 humanoid robot** (nicknamed *sb01*), developed at **California State University, San Bernardino (CSUSB)**. The robot listens via its onboard ASR, reasons with Claude (Anthropic), and speaks back using Edge TTS — all in real time. It also uses **face recognition** to identify known people at startup and load their personal memory profile.
+
+---
+
+## Research Track Focus — IST 5930
+
+This branch is for the **Research** track. Your focus: **simulation-based policy training** using [Lucky Engine](https://docs.luckyrobots.com/stable/), a physics-driven robotics simulator with real-time rendering, an editor, and a gRPC server with a Python SDK for driving simulations programmatically. It supports MuJoCo model import (including the MuJoCo Menagerie) and deterministic simulation, so you can train and evaluate control policies for the G1 before touching hardware.
+
+Suggested workflow:
+1. Install Lucky Engine and run the Welcome scene / example projects ([docs](https://docs.luckyrobots.com/stable/)).
+2. Import or build a G1 (or G1-arm) model — MJCF/MuJoCo-compatible — into Lucky Engine.
+3. Script tasks and reward functions via the Python SDK (gRPC), iterating on RL- or IK-based control policies.
+4. Record rollouts/demonstrations for evaluation, and where possible sanity-check trained policies against the real G1 (see `scripts/` and the Engineering branch for hardware interfacing once you're ready to test).
+
+**Deliverable:** a trained/evaluated policy (or a documented training pipeline) plus a short write-up of your simulation setup and results.
 
 ---
 
@@ -193,4 +207,4 @@ export ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY .env | cut -d= -f2)
 
 ## Course Context
 
-Developed as part of the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. Demonstrates real-time LLM integration on an embedded humanoid platform.
+Developed as part of **IST 5930 (Fall 2026)** and the robotics program at **California State University, San Bernardino (CSUSB)** under **Prof. Yutong Liu**. This branch supports the **Research** track — simulation and policy training. Demonstrates real-time LLM integration on an embedded humanoid platform.
