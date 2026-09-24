@@ -1,0 +1,3 @@
+PolicyRegistry:
+  walker: ContentVault/Robots/UnitreeG1FiveFingers/Policies/policy_descriptor.walker.json
+  rotator: ContentVault/Robots/UnitreeG1FiveFingers/Policies/policy_descriptor.rotator.json
