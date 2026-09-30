@@ -410,7 +410,7 @@ class SB01ConversationLoop:
             self.history = self.history[-(MAX_HISTORY_TURNS * 2):]
 
         with self.claude.messages.stream(
-            model="claude-opus-4-8",
+            model="claude-haiku-4-5",
             max_tokens=256,
             system=self._build_system_prompt(),
             messages=self.history,
@@ -455,7 +455,7 @@ class SB01ConversationLoop:
                 "about the user as a comma-separated list. If none, write 'FACTS: none'."
             )
             resp = self.claude.messages.create(
-                model="claude-opus-4-8",
+                model="claude-haiku-4-5",
                 max_tokens=300,
                 messages=self.history + [{"role": "user", "content": summary_request}],
             )
