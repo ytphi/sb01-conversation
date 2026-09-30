@@ -53,6 +53,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from teleop.face_id import FaceIdentifier
 from teleop.memory_manager import MemoryManager
 
+STAGE_LOG = "logs/sb01_stage.jsonl"
+os.makedirs("logs", exist_ok=True)
+
+
+def log_event(event, since=None, status="ok", **counts):
+    """Record timing metadata only. Never pass recognized or generated text."""
+    now = time.time()
+    record = {"ts": round(now, 3), "event": event, "status": status}
+    if since is not None:
+        record["latency_ms"] = round((now - since) * 1000)
+    record.update(counts)
+    with open(STAGE_LOG, "a") as log_file:
+        log_file.write(json.dumps(record) + "\n")
+    return now
+
 # ── config ───────────────────────────────────────────────────────────────────
 NETWORK_INTERFACE = "eno0"
 ROBOT_NAME        = "sb01"
@@ -181,7 +196,7 @@ class SB01ConversationLoop:
         self.interface   = interface
         self.web_context = web_context
         self.audio       = AudioClient()
-        self.asr_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+        self.asr_queue: queue.Queue[tuple[str, str, float]] = queue.Queue()
         self.speaking    = threading.Event()
         self.tts_done    = threading.Event()
         self.history: list[dict] = []
@@ -252,7 +267,8 @@ class SB01ConversationLoop:
             if self._asr_timer:
                 self._asr_timer.cancel()
             self._pending_text = ""
-            self.asr_queue.put((text, emotion))
+            t_asr = log_event("asr_final")
+            self.asr_queue.put((text, emotion, t_asr))
         else:
             self._pending_text    = text
             self._pending_emotion = emotion
@@ -266,7 +282,8 @@ class SB01ConversationLoop:
         text, emotion = self._pending_text, self._pending_emotion
         self._pending_text = self._pending_emotion = ""
         if text and not self.speaking.is_set():
-            self.asr_queue.put((text, emotion))
+            t_asr = log_event("asr_final")
+            self.asr_queue.put((text, emotion, t_asr))
 
     # ── TTS ──────────────────────────────────────────────────────────────────
 
@@ -290,21 +307,28 @@ class SB01ConversationLoop:
         audio = audio.set_frame_rate(PCM_SAMPLE_RATE).set_channels(1).set_sample_width(2)
         return audio.raw_data
 
-    def _speak(self, text: str):
+    def _speak(self, text: str, t_asr=None, t_claude=None):
         text = re.sub(r'\bCSUSB\b', 'Cal State San Bernardino', text, flags=re.IGNORECASE)
         self.speaking.set()
         self.tts_done.clear()
         try:
             self.audio.LedControl(0, 0, 128)
             pcm = asyncio.run(self._text_to_pcm(text))
+            if t_claude is not None:
+                log_event("pcm_ready", since=t_claude)
+
             stream_id = str(int(time.time() * 1000))
             total = len(pcm)
             for offset in range(0, total, PCM_CHUNK_BYTES):
                 chunk = pcm[offset:offset + PCM_CHUNK_BYTES]
+                if offset == 0 and t_asr is not None:
+                    log_event("tts_start", since=t_asr)
                 self.audio.PlayStream("sb01", stream_id, list(chunk))
                 if offset + PCM_CHUNK_BYTES < total:
                     time.sleep(1.0)
             self.tts_done.wait(timeout=total / (PCM_SAMPLE_RATE * 2) + 3.0)
+            if t_asr is not None:
+                log_event("tts_end", since=t_asr)
             time.sleep(0.4)
         finally:
             self.audio.LedControl(0, 0, 0)
@@ -312,7 +336,7 @@ class SB01ConversationLoop:
 
     # ── Claude ───────────────────────────────────────────────────────────────
 
-    def _ask_claude(self, user_text: str, emotion: str) -> str:
+    def _ask_claude(self, user_text: str, emotion: str, t_asr: float):
         context_parts = []
 
         # weather injection
@@ -339,9 +363,15 @@ class SB01ConversationLoop:
             system=self._build_system_prompt(),
             messages=self.history,
         )
+        t_claude = log_event(
+            "claude_response",
+            since=t_asr,
+            tokens_in=response.usage.input_tokens,
+            tokens_out=response.usage.output_tokens,
+        )
         reply = response.content[0].text
         self.history.append({"role": "assistant", "content": reply})
-        return reply, emotion_led
+        return reply, emotion_led, t_claude
 
     # ── session save ─────────────────────────────────────────────────────────
 
@@ -407,7 +437,7 @@ class SB01ConversationLoop:
         while True:
             try:
                 try:
-                    user_text, emotion = self.asr_queue.get(timeout=0.1)
+                    user_text, emotion, t_asr = self.asr_queue.get(timeout=0.1)
                 except queue.Empty:
                     continue
 
@@ -422,14 +452,17 @@ class SB01ConversationLoop:
                 self.audio.LedControl(*emotion_led)
 
                 try:
-                    reply, emotion_led = self._ask_claude(user_text, emotion)
+                    reply, emotion_led, t_claude = self._ask_claude(
+                        user_text, emotion, t_asr
+                    )
                 except Exception as exc:
                     print(f"[error]  Claude API: {exc}")
                     reply = "Sorry, I had trouble with that. Could you say it again?"
                     emotion_led = (0, 0, 0)
+                    t_claude = None
 
                 print(f"[{ROBOT_NAME}]  {reply}")
-                self._speak(reply)
+                self._speak(reply, t_asr=t_asr, t_claude=t_claude)
                 self.audio.LedControl(0, 128, 0)
 
             except KeyboardInterrupt:
