@@ -55,6 +55,7 @@ from teleop.memory_manager import MemoryManager
 
 STAGE_LOG = "logs/sb01_stage.jsonl"
 os.makedirs("logs", exist_ok=True)
+SENTENCE_END = re.compile(r'(?<=[.?!])\s+')
 
 
 def log_event(event, since=None, status="ok", **counts):
@@ -334,9 +335,60 @@ class SB01ConversationLoop:
             self.audio.LedControl(0, 0, 0)
             self.speaking.clear()
 
+    def _speak_sentence_queue(self, sentences: queue.Queue, t_asr: float):
+        """Convert and play streamed sentences while keeping the microphone muted."""
+        self.speaking.set()
+        self.audio.LedControl(0, 0, 128)
+        stream_id = str(int(time.time() * 1000))
+        first_sentence = True
+
+        try:
+            while True:
+                sentence = sentences.get()
+                if sentence is None:
+                    break
+
+                sentence = re.sub(
+                    r'\bCSUSB\b',
+                    'Cal State San Bernardino',
+                    sentence,
+                    flags=re.IGNORECASE,
+                )
+                pcm = asyncio.run(self._text_to_pcm(sentence))
+
+                if first_sentence:
+                    log_event("pcm_ready", since=t_asr)
+
+                self.tts_done.clear()
+                total = len(pcm)
+                for offset in range(0, total, PCM_CHUNK_BYTES):
+                    chunk = pcm[offset:offset + PCM_CHUNK_BYTES]
+                    if first_sentence and offset == 0:
+                        log_event("tts_start", since=t_asr)
+                    self.audio.PlayStream("sb01", stream_id, list(chunk))
+                    if offset + PCM_CHUNK_BYTES < total:
+                        time.sleep(1.0)
+
+                self.tts_done.wait(
+                    timeout=total / (PCM_SAMPLE_RATE * 2) + 3.0
+                )
+                first_sentence = False
+
+            log_event("tts_end", since=t_asr)
+            time.sleep(0.4)
+        finally:
+            self.audio.LedControl(0, 0, 0)
+            self.speaking.clear()
+
     # ── Claude ───────────────────────────────────────────────────────────────
 
-    def _ask_claude(self, user_text: str, emotion: str, t_asr: float):
+    def _ask_claude(
+        self,
+        user_text: str,
+        emotion: str,
+        t_asr: float,
+        sentences: queue.Queue,
+    ):
         context_parts = []
 
         # weather injection
@@ -357,19 +409,36 @@ class SB01ConversationLoop:
         if len(self.history) > MAX_HISTORY_TURNS * 2:
             self.history = self.history[-(MAX_HISTORY_TURNS * 2):]
 
-        response = self.claude.messages.create(
+        with self.claude.messages.stream(
             model="claude-opus-4-8",
             max_tokens=256,
             system=self._build_system_prompt(),
             messages=self.history,
-        )
+        ) as stream:
+            buffer = ""
+            for text in stream.text_stream:
+                buffer += text
+                parts = SENTENCE_END.split(buffer)
+                for sentence in parts[:-1]:
+                    sentence = sentence.strip()
+                    if sentence:
+                        sentences.put(sentence)
+                buffer = parts[-1]
+
+            if buffer.strip():
+                sentences.put(buffer.strip())
+
+            response = stream.get_final_message()
+
         t_claude = log_event(
             "claude_response",
             since=t_asr,
             tokens_in=response.usage.input_tokens,
             tokens_out=response.usage.output_tokens,
         )
-        reply = response.content[0].text
+        reply = "".join(
+            block.text for block in response.content if block.type == "text"
+        )
         self.history.append({"role": "assistant", "content": reply})
         return reply, emotion_led, t_claude
 
@@ -451,18 +520,30 @@ class SB01ConversationLoop:
                 emotion_led = EMOTION_MAP.get(emotion, ((0, 0, 0), ""))[0]
                 self.audio.LedControl(*emotion_led)
 
+                sentences = queue.Queue()
+                speaker = threading.Thread(
+                    target=self._speak_sentence_queue,
+                    args=(sentences, t_asr),
+                    daemon=True,
+                )
+                speaker.start()
+
                 try:
                     reply, emotion_led, t_claude = self._ask_claude(
-                        user_text, emotion, t_asr
+                        user_text, emotion, t_asr, sentences
                     )
                 except Exception as exc:
                     print(f"[error]  Claude API: {exc}")
                     reply = "Sorry, I had trouble with that. Could you say it again?"
                     emotion_led = (0, 0, 0)
                     t_claude = None
+                    sentences.put(reply)
+                finally:
+                    sentences.put(None)
+
+                speaker.join()
 
                 print(f"[{ROBOT_NAME}]  {reply}")
-                self._speak(reply, t_asr=t_asr, t_claude=t_claude)
                 self.audio.LedControl(0, 128, 0)
 
             except KeyboardInterrupt:
