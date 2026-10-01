@@ -1,0 +1,20 @@
+# Experimental speech framework (experimental/speech-framework)
+# Chatterbox is developed/tested on Python 3.11 - use a 3.11 venv.
+
+pyyaml
+numpy
+
+# LLM providers - install the ones you use (Gemini is the default)
+google-genai          # gemini
+openai                # deepseek (OpenAI-compatible API)
+anthropic             # claude
+
+# TTS: Chatterbox Nano + Multilingual (pulls in torch / torchaudio)
+chatterbox-tts
+
+# Local test mode only (non-robot-testmode/run_local.py)
+sounddevice
+soundfile
+
+# On the robot machine you also need unitree_sdk2_python + cyclonedds==0.10.2
+# (installed by the repo's setup.sh)

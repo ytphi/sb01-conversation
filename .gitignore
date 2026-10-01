@@ -42,3 +42,6 @@ record/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Local test-mode audio output
+non-robot-testmode/out/
