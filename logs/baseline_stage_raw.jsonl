@@ -1,0 +1,55 @@
+{"ts": 1790810748.412, "event": "asr_final", "status": "ok"}
+{"ts": 1790810750.055, "event": "claude_response", "status": "ok", "latency_ms": 1643, "tokens_in": 1848, "tokens_out": 73}
+{"ts": 1790810751.845, "event": "pcm_ready", "status": "ok", "latency_ms": 1790}
+{"ts": 1790810751.846, "event": "tts_start", "status": "ok", "latency_ms": 3433}
+{"ts": 1790810770.241, "event": "tts_end", "status": "ok", "latency_ms": 21829}
+{"ts": 1790810773.563, "event": "asr_final", "status": "ok"}
+{"ts": 1790810774.721, "event": "claude_response", "status": "ok", "latency_ms": 1158, "tokens_in": 1930, "tokens_out": 43}
+{"ts": 1790810775.74, "event": "pcm_ready", "status": "ok", "latency_ms": 1018}
+{"ts": 1790810775.74, "event": "tts_start", "status": "ok", "latency_ms": 2177}
+{"ts": 1790810788.025, "event": "tts_end", "status": "ok", "latency_ms": 14462}
+{"ts": 1790810791.121, "event": "asr_final", "status": "ok"}
+{"ts": 1790810792.229, "event": "claude_response", "status": "ok", "latency_ms": 1108, "tokens_in": 1981, "tokens_out": 45}
+{"ts": 1790810793.474, "event": "pcm_ready", "status": "ok", "latency_ms": 1245}
+{"ts": 1790810793.474, "event": "tts_start", "status": "ok", "latency_ms": 2353}
+{"ts": 1790810805.368, "event": "tts_end", "status": "ok", "latency_ms": 14247}
+{"ts": 1790810808.707, "event": "asr_final", "status": "ok"}
+{"ts": 1790810809.742, "event": "claude_response", "status": "ok", "latency_ms": 1035, "tokens_in": 2034, "tokens_out": 46}
+{"ts": 1790810811.477, "event": "pcm_ready", "status": "ok", "latency_ms": 1734}
+{"ts": 1790810811.477, "event": "tts_start", "status": "ok", "latency_ms": 2770}
+{"ts": 1790810826.245, "event": "tts_end", "status": "ok", "latency_ms": 17538}
+{"ts": 1790810831.547, "event": "asr_final", "status": "ok"}
+{"ts": 1790810832.676, "event": "claude_response", "status": "ok", "latency_ms": 1129, "tokens_in": 2088, "tokens_out": 53}
+{"ts": 1790810833.694, "event": "pcm_ready", "status": "ok", "latency_ms": 1018}
+{"ts": 1790810833.694, "event": "tts_start", "status": "ok", "latency_ms": 2147}
+{"ts": 1790810846.778, "event": "tts_end", "status": "ok", "latency_ms": 15230}
+{"ts": 1790810851.591, "event": "asr_final", "status": "ok"}
+{"ts": 1790810852.643, "event": "claude_response", "status": "ok", "latency_ms": 1052, "tokens_in": 2149, "tokens_out": 45}
+{"ts": 1790810853.941, "event": "pcm_ready", "status": "ok", "latency_ms": 1298}
+{"ts": 1790810853.941, "event": "tts_start", "status": "ok", "latency_ms": 2350}
+{"ts": 1790810865.926, "event": "tts_end", "status": "ok", "latency_ms": 14334}
+{"ts": 1790810870.992, "event": "asr_final", "status": "ok"}
+{"ts": 1790810872.306, "event": "claude_response", "status": "ok", "latency_ms": 1314, "tokens_in": 2206, "tokens_out": 60}
+{"ts": 1790810873.429, "event": "pcm_ready", "status": "ok", "latency_ms": 1123}
+{"ts": 1790810873.429, "event": "tts_start", "status": "ok", "latency_ms": 2437}
+{"ts": 1790810889.855, "event": "tts_end", "status": "ok", "latency_ms": 18863}
+{"ts": 1790810894.506, "event": "asr_final", "status": "ok"}
+{"ts": 1790810895.448, "event": "claude_response", "status": "ok", "latency_ms": 941, "tokens_in": 2274, "tokens_out": 45}
+{"ts": 1790810896.552, "event": "pcm_ready", "status": "ok", "latency_ms": 1104}
+{"ts": 1790810896.552, "event": "tts_start", "status": "ok", "latency_ms": 2045}
+{"ts": 1790810909.243, "event": "tts_end", "status": "ok", "latency_ms": 14737}
+{"ts": 1790810913.562, "event": "asr_final", "status": "ok"}
+{"ts": 1790810914.701, "event": "claude_response", "status": "ok", "latency_ms": 1139, "tokens_in": 2328, "tokens_out": 52}
+{"ts": 1790810915.788, "event": "pcm_ready", "status": "ok", "latency_ms": 1086}
+{"ts": 1790810915.788, "event": "tts_start", "status": "ok", "latency_ms": 2226}
+{"ts": 1790810930.554, "event": "tts_end", "status": "ok", "latency_ms": 16991}
+{"ts": 1790810934.797, "event": "asr_final", "status": "ok"}
+{"ts": 1790810935.997, "event": "claude_response", "status": "ok", "latency_ms": 1200, "tokens_in": 2388, "tokens_out": 52}
+{"ts": 1790810937.466, "event": "pcm_ready", "status": "ok", "latency_ms": 1469}
+{"ts": 1790810937.466, "event": "tts_start", "status": "ok", "latency_ms": 2670}
+{"ts": 1790810952.312, "event": "tts_end", "status": "ok", "latency_ms": 17515}
+{"ts": 1790810956.757, "event": "asr_final", "status": "ok"}
+{"ts": 1790810958.73, "event": "claude_response", "status": "ok", "latency_ms": 1973, "tokens_in": 2472, "tokens_out": 45}
+{"ts": 1790810959.832, "event": "pcm_ready", "status": "ok", "latency_ms": 1101}
+{"ts": 1790810959.832, "event": "tts_start", "status": "ok", "latency_ms": 3074}
+{"ts": 1790810971.128, "event": "tts_end", "status": "ok", "latency_ms": 14370}
