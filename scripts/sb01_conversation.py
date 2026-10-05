@@ -7,6 +7,7 @@ Features:
   - Persistent memory: user profile + session summaries saved across runs
   - Emotion-aware: LED reacts to detected voice emotion; Claude gets emotion hint
   - Edge TTS with automatic language detection (EN / ZH / ES)
+  - Optional co-speech arm gestures via scripts/gesture_server.py
 
 Network layout:
   eno0 (Ethernet, 192.168.123.x)  -- DDS: ASR messages in, TTS/LED commands out
@@ -39,6 +40,7 @@ import asyncio
 import threading
 import urllib.request
 import urllib.parse
+from collections import deque
 from html.parser import HTMLParser
 
 import anthropic
@@ -52,6 +54,7 @@ from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from teleop.face_id import FaceIdentifier
 from teleop.memory_manager import MemoryManager
+from teleop.gesture_client import GestureClient, GESTURE_SAMPLE_RATE
 
 # ── config ───────────────────────────────────────────────────────────────────
 NETWORK_INTERFACE = "eno0"
@@ -64,6 +67,13 @@ VOICE_ES = "es-MX-DaliaNeural"
 PCM_SAMPLE_RATE   = 16000
 PCM_CHUNK_BYTES   = 96000
 MAX_HISTORY_TURNS = 10
+
+# Co-speech arm gestures: set SB01_GESTURE_URL to the scripts/gesture_server.py
+# address to enable, e.g. http://127.0.0.1:8765. Unset = no arm motion.
+GESTURE_URL = os.environ.get("SB01_GESTURE_URL", "").strip()
+# Motion is delayed by the speaker's measured start-up time so it lands on the
+# first sound. Never by more than this, in case that measurement is off.
+AUDIO_LATENCY_MAX = 0.5
 
 PRELOAD_URLS = [
     "https://www.csusb.edu/",
@@ -193,6 +203,9 @@ class SB01ConversationLoop:
         self.memory  = MemoryManager()
         self.face_id = FaceIdentifier()
         self.person_name: str | None = None
+        self.gestures: GestureClient | None = None
+        self._play_called: float | None = None   # when the current audio was sent
+        self._audio_latencies: deque[float] = deque(maxlen=5)   # sent -> sound, seconds
 
     # ── startup ──────────────────────────────────────────────────────────────
 
@@ -226,6 +239,10 @@ class SB01ConversationLoop:
         self.asr_sub.Init(self._asr_callback, 10)
         print(f"[{ROBOT_NAME}] subscribed to {ASR_TOPIC}")
 
+        if GESTURE_URL:
+            self.gestures = GestureClient(GESTURE_URL)
+            print(f"[{ROBOT_NAME}] arm gestures enabled via {GESTURE_URL}")
+
     # ── DDS callback ─────────────────────────────────────────────────────────
 
     def _asr_callback(self, msg: String_):
@@ -237,6 +254,8 @@ class SB01ConversationLoop:
         if "play_state" in data:
             if data["play_state"] == 0:
                 self.tts_done.set()
+            elif data["play_state"] == 1:
+                self._note_audio_started()
             return
 
         if self.speaking.is_set():
@@ -279,7 +298,8 @@ class SB01ConversationLoop:
             return VOICE_ES
         return VOICE_EN
 
-    async def _text_to_pcm(self, text: str) -> bytes:
+    async def _text_to_pcm(self, text: str) -> tuple[bytes, bytes | None]:
+        """Returns (playback PCM, gesture-model PCM or None if gestures are off)."""
         communicate = edge_tts.Communicate(text, self._pick_voice(text))
         mp3_chunks = []
         async for chunk in communicate.stream():
@@ -287,8 +307,27 @@ class SB01ConversationLoop:
                 mp3_chunks.append(chunk["data"])
         mp3_data = b"".join(mp3_chunks)
         audio = AudioSegment.from_mp3(io.BytesIO(mp3_data))
-        audio = audio.set_frame_rate(PCM_SAMPLE_RATE).set_channels(1).set_sample_width(2)
-        return audio.raw_data
+        audio = audio.set_channels(1).set_sample_width(2)
+        gesture_pcm = (
+            audio.set_frame_rate(GESTURE_SAMPLE_RATE).raw_data if self.gestures else None
+        )
+        return audio.set_frame_rate(PCM_SAMPLE_RATE).raw_data, gesture_pcm
+
+    def _begin_gesture(self):
+        """Start the motion so its first frame lands on the first sound, allowing
+        for how long the speaker has recently taken to start playing."""
+        recent = sorted(self._audio_latencies)
+        latency = recent[len(recent) // 2] if recent else 0.0
+        self._play_called = time.time()
+        self.gestures.begin(min(latency, AUDIO_LATENCY_MAX))
+
+    def _note_audio_started(self):
+        called, self._play_called = self._play_called, None
+        if called is None:
+            return
+        latency = time.time() - called
+        if 0.0 <= latency <= 2.0:
+            self._audio_latencies.append(latency)
 
     def _speak(self, text: str):
         text = re.sub(r'\bCSUSB\b', 'Cal State San Bernardino', text, flags=re.IGNORECASE)
@@ -296,16 +335,25 @@ class SB01ConversationLoop:
         self.tts_done.clear()
         try:
             self.audio.LedControl(0, 0, 128)
-            pcm = asyncio.run(self._text_to_pcm(text))
+            pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text))
+            # Arms are taken and the first second of motion is ready, or no gesture.
+            gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm)
+
             stream_id = str(int(time.time() * 1000))
             total = len(pcm)
             for offset in range(0, total, PCM_CHUNK_BYTES):
                 chunk = pcm[offset:offset + PCM_CHUNK_BYTES]
+                if offset == 0 and gesturing:
+                    self._begin_gesture()
                 self.audio.PlayStream("sb01", stream_id, list(chunk))
                 if offset + PCM_CHUNK_BYTES < total:
                     time.sleep(1.0)
             self.tts_done.wait(timeout=total / (PCM_SAMPLE_RATE * 2) + 3.0)
             time.sleep(0.4)
+        except BaseException:
+            if self.gestures:
+                self.gestures.stop()
+            raise
         finally:
             self.audio.LedControl(0, 0, 0)
             self.speaking.clear()
@@ -436,6 +484,8 @@ class SB01ConversationLoop:
                 print(f"\n[{ROBOT_NAME}] shutting down...")
                 self.face_id.stop_live_window()
                 self._speak("Goodbye! It was great talking with you.")
+                if self.gestures:
+                    self.gestures.wait()
                 self._save_session()
                 break
 
@@ -453,8 +503,12 @@ def main():
     ChannelFactoryInitialize(0, interface)
 
     bot = SB01ConversationLoop(interface, web_context)
-    bot.setup()
-    bot.run()
+    try:
+        bot.setup()
+        bot.run()
+    finally:
+        if bot.gestures:
+            bot.gestures.close()   # arms are released however the script ends
 
 
 if __name__ == "__main__":
