@@ -81,11 +81,15 @@ MAX_STEP_RAD        = 0.05      # per frame, per joint: RoboGesture's own speed 
 MAX_HOLD_OFFSET_RAD = 0.3       # how far the sidecar may place the hold pose from the measured arms
 MAX_BLOCK_FRAMES    = 300       # one message never carries more than 10 s
 
-# Robot state the gestures were validated in. FSM 501 is the main motion-control
-# state RoboGesture requires; override with SB01_GESTURE_FSM_IDS="501,..." once
-# another state is known to accept rt/arm_sdk on this firmware.
+# Robot state in which gestures are sent. FSM 802 is what this G1 (sb01) reports
+# while standing in motion control, and the state in which arm gestures were run
+# on the physical robot (mode_pr=0, mode_machine=5). Gestures are refused in any
+# other state. To allow different or additional states on another robot or
+# firmware, set SB01_GESTURE_FSM_IDS to a comma-separated list, e.g. "802,501"
+# (501 is the state RoboGesture's own setup used); it replaces this default.
+DEFAULT_FSM_IDS = "802"
 FSM_ALLOWED = tuple(
-    int(value) for value in os.environ.get("SB01_GESTURE_FSM_IDS", "501").split(",") if value.strip()
+    int(value) for value in os.environ.get("SB01_GESTURE_FSM_IDS", DEFAULT_FSM_IDS).split(",") if value.strip()
 )
 # Optional: only gesture when rt/lowstate reports one of these mode_machine
 # values (SB01_GESTURE_MODE_MACHINE="5"). Unset = not enforced, but it may never
