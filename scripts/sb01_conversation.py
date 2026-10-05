@@ -58,7 +58,7 @@ from teleop.gesture_client import GestureClient, GESTURE_SAMPLE_RATE
 
 # ── config ───────────────────────────────────────────────────────────────────
 NETWORK_INTERFACE = "eno0"
-ROBOT_NAME        = "sb01"
+ROBOT_NAME        = "Yotie"
 ASR_TOPIC         = "rt/audio_msg"
 VOICE_EN = "en-US-JennyNeural"
 VOICE_ZH = "zh-CN-XiaoxiaoNeural"
@@ -88,6 +88,21 @@ WEATHER_KEYWORDS = {
     "cold", "hot", "warm", "forecast", "humid", "humidity", "wind", "windy",
     "snow", "snowing", "cloudy", "overcast",
 }
+
+# The robot's name. Speech recognition often writes "Yotie" some other way
+# ("Yodee", "You-Tee", "Yoti" ...). NAME_HEARD finds those in what a person said,
+# so Claude can be told they mean the robot. NAME_SPOKEN_WRONG finds them, and
+# the old "sb01" designation, in a reply, so the robot always says its own name
+# as ROBOT_NAME. (File names and technical identifiers keep "sb01".)
+# Matched only as a whole word among Latin letters and digits, so a name written
+# right next to Chinese characters is still found.
+_NAME_START, _NAME_END = "(?<![A-Za-z0-9])", "(?![A-Za-z0-9])"
+NAME_HEARD = re.compile(
+    _NAME_START + "(?:yo+d(?:ee|ie|ey|i|y)|yo+tt?(?:ie|ee|ey|i|y)|yo[- ]tee|you[- ]?tee)" + _NAME_END,
+    re.IGNORECASE)
+NAME_SPOKEN_WRONG = re.compile(
+    _NAME_START + "(?:yo+d(?:ee|ie|ey|i|y)|yo+tt?(?:ie|ee|ey|i|y)|yo-?tee|you-?tee|sb[- ]?01)" + _NAME_END,
+    re.IGNORECASE)
 
 # Reply language. The robot answers in the language it is spoken to in. A short
 # or unclear phrase never switches it, so a misheard word is answered in the
@@ -129,7 +144,12 @@ BASE_SYSTEM_PROMPT = (
     "You speak English, Spanish and Chinese. Always reply in the language named in the "
     "bracketed language note on the latest message, even if the message itself or earlier "
     "turns are in another language. If the message is unclear or does not make sense, say "
-    "briefly in that language that you did not catch it and ask them to repeat."
+    "briefly in that language that you did not catch it and ask them to repeat. "
+    f"Your name is {ROBOT_NAME}. Speech recognition often writes your name differently, for "
+    "example Yodee, You-Tee, Yoti, Yotee or Yodie. When someone uses a name like that for "
+    f"you, they mean you. Always call yourself {ROBOT_NAME}, spelled exactly that way, and "
+    "never use any other name for yourself. Do not point out or correct how someone says or "
+    "spells your name."
 )
 
 # ── web utilities ─────────────────────────────────────────────────────────────
@@ -200,6 +220,18 @@ def load_context() -> str:
         except Exception as exc:
             parts.append(f"--- {path} ---\n[Could not read: {exc}]")
     return "\n\n".join(parts)
+
+
+# ── name ──────────────────────────────────────────────────────────────────────
+
+def heard_own_name(text: str) -> bool:
+    """Did the person use a likely mis-transcription of the robot's name?"""
+    return any(m.group(0).lower() != ROBOT_NAME.lower() for m in NAME_HEARD.finditer(text))
+
+
+def say_own_name(text: str) -> str:
+    """A reply with every variant of the robot's name replaced by ROBOT_NAME."""
+    return NAME_SPOKEN_WRONG.sub(ROBOT_NAME, text)
 
 
 # ── language ──────────────────────────────────────────────────────────────────
@@ -441,6 +473,11 @@ class SB01ConversationLoop:
             self.language = heard
         context_parts.append(f"[Reply in {LANGUAGE_NAMES[self.language]}.]")
 
+        # the robot's name as speech recognition tends to write it
+        if heard_own_name(user_text):
+            context_parts.append(f"[The name in this message is how your name, {ROBOT_NAME}, was "
+                                 f"transcribed; the person is talking to you.]")
+
         # weather injection
         if set(user_text.lower().split()) & WEATHER_KEYWORDS:
             location = extract_location(user_text)
@@ -465,7 +502,7 @@ class SB01ConversationLoop:
             system=self._build_system_prompt(),
             messages=self.history,
         )
-        reply = response.content[0].text
+        reply = say_own_name(response.content[0].text)   # it only ever calls itself ROBOT_NAME
         self.history.append({"role": "assistant", "content": reply})
         return reply, emotion_led
 
