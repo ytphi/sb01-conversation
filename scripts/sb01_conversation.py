@@ -89,6 +89,28 @@ WEATHER_KEYWORDS = {
     "snow", "snowing", "cloudy", "overcast",
 }
 
+# Reply language. The robot answers in the language it is spoken to in. A short
+# or unclear phrase never switches it, so a misheard word is answered in the
+# language the robot last spoke.
+LANGUAGE_NAMES  = {"en": "English", "es": "Spanish", "zh": "Chinese"}
+LANGUAGE_VOICES = {"en": VOICE_EN, "es": VOICE_ES, "zh": VOICE_ZH}
+SPANISH_WORDS = {
+    "hola", "gracias", "qué", "que", "cómo", "como", "está", "estás", "estoy", "eres",
+    "buenos", "buenas", "días", "dias", "tardes", "noches", "por", "favor", "dónde",
+    "donde", "cuál", "cual", "quién", "quien", "el", "la", "los", "las", "un", "una",
+    "es", "y", "de", "del", "para", "con", "tú", "usted", "puedes", "puede", "tiempo",
+    "hace", "hoy", "sí", "adiós", "adios", "bien", "muy", "nombre", "llamas", "hablas",
+    "español", "espanol", "tu", "te", "se", "en", "mi", "pero", "porque", "cuando",
+    "cuándo", "tienes", "tiene", "quiero", "soy", "universidad", "clima",
+}
+# Short phrases that are a reliable sign of the speaker's language on their own.
+CLEAR_GREETINGS = {
+    "en": {"hi", "hello", "hey", "hi there", "hello there", "good morning", "good afternoon",
+           "good evening", "thank you", "thanks"},
+    "es": {"hola", "buenos días", "buenos dias", "buenas tardes", "buenas noches", "gracias"},
+    "zh": {"你好", "您好", "你好吗", "谢谢", "谢谢你", "早上好", "晚上好"},
+}
+
 # emotion → (LED color while thinking, hint for Claude)
 EMOTION_MAP = {
     "happy":   ((128, 128, 0),  "The user sounds happy and upbeat."),
@@ -103,7 +125,11 @@ BASE_SYSTEM_PROMPT = (
     "You are talking to people face-to-face in real life. "
     "Keep every reply to 1-3 short sentences — you will be speaking aloud. "
     "Do not use markdown, bullet points, or special characters. "
-    "When given reference information in square brackets, use it naturally to answer questions."
+    "When given reference information in square brackets, use it naturally to answer questions. "
+    "You speak English, Spanish and Chinese. Always reply in the language named in the "
+    "bracketed language note on the latest message, even if the message itself or earlier "
+    "turns are in another language. If the message is unclear or does not make sense, say "
+    "briefly in that language that you did not catch it and ask them to repeat."
 )
 
 # ── web utilities ─────────────────────────────────────────────────────────────
@@ -176,6 +202,43 @@ def load_context() -> str:
     return "\n\n".join(parts)
 
 
+# ── language ──────────────────────────────────────────────────────────────────
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[^\W\d_]+", text.lower())
+
+
+def _has_cjk(text: str) -> bool:
+    return any("一" <= c <= "鿿" for c in text)
+
+
+def detect_language(text: str) -> str:
+    """'en', 'es' or 'zh' for a piece of text."""
+    if _has_cjk(text):
+        return "zh"
+    words = _words(text)
+    if any(c in "áéíóúñ¿¡ü" for c in text.lower()):
+        return "es"
+    if words and sum(w in SPANISH_WORDS for w in words) / len(words) >= 0.5:
+        return "es"
+    return "en"
+
+
+def is_clear_language(text: str, language: str) -> bool:
+    """Is this phrase enough to switch the conversation to `language`?
+
+    Short phrases are where speech recognition guesses the language wrong (an
+    English "Hi" can come back as a Chinese character), so only a clear greeting
+    or a longer sentence may switch. Anything else is answered in the language
+    the robot last spoke."""
+    cleaned = re.sub(r"[^\w\s]", "", text.lower()).strip()
+    if cleaned in CLEAR_GREETINGS.get(language, ()):
+        return True
+    if language == "zh":
+        return sum(_has_cjk(c) for c in text) >= 4
+    return len(_words(text)) >= 3
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_emotion(raw: str) -> str:
@@ -206,6 +269,7 @@ class SB01ConversationLoop:
         self.gestures: GestureClient | None = None
         self._play_called: float | None = None   # when the current audio was sent
         self._audio_latencies: deque[float] = deque(maxlen=5)   # sent -> sound, seconds
+        self.language = "en"   # language the robot last spoke; replies stay in it until a clear switch
 
     # ── startup ──────────────────────────────────────────────────────────────
 
@@ -262,7 +326,11 @@ class SB01ConversationLoop:
             return
 
         text = data.get("text", "").strip()
-        if not text or len(text) < 3:
+        # Drop noise (nothing, punctuation, a lone letter) but keep short real
+        # phrases such as "Hi", "Hola" and "你好" for the language handling.
+        # One Chinese character is a whole word, so it is kept too.
+        spoken = re.sub(r"[\W_]", "", text)
+        if len(spoken) < 2 and not _has_cjk(spoken):
             return
 
         emotion = _parse_emotion(data.get("emotion", ""))
@@ -291,16 +359,18 @@ class SB01ConversationLoop:
 
     @staticmethod
     def _pick_voice(text: str) -> str:
-        # Chinese temporarily disabled
-        # if any('一' <= c <= '鿿' for c in text):
-        #     return VOICE_ZH
+        if any('一' <= c <= '鿿' for c in text):
+            return VOICE_ZH
         if any(c in {'á','é','í','ó','ú','ñ','¿','¡','ü'} for c in text.lower()):
             return VOICE_ES
         return VOICE_EN
 
-    async def _text_to_pcm(self, text: str) -> tuple[bytes, bytes | None]:
+    async def _text_to_pcm(self, text: str, language: str | None = None) -> tuple[bytes, bytes | None]:
         """Returns (playback PCM, gesture-model PCM or None if gestures are off)."""
-        communicate = edge_tts.Communicate(text, self._pick_voice(text))
+        voice = self._pick_voice(text)
+        if voice == VOICE_EN and language in ("es", "zh"):
+            voice = LANGUAGE_VOICES[language]   # e.g. a Spanish reply with no accented letters
+        communicate = edge_tts.Communicate(text, voice)
         mp3_chunks = []
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
@@ -329,13 +399,13 @@ class SB01ConversationLoop:
         if 0.0 <= latency <= 2.0:
             self._audio_latencies.append(latency)
 
-    def _speak(self, text: str):
+    def _speak(self, text: str, language: str | None = None):
         text = re.sub(r'\bCSUSB\b', 'Cal State San Bernardino', text, flags=re.IGNORECASE)
         self.speaking.set()
         self.tts_done.clear()
         try:
             self.audio.LedControl(0, 0, 128)
-            pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text))
+            pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text, language))
             # Arms are taken and the first second of motion is ready, or no gesture.
             gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm)
 
@@ -362,6 +432,14 @@ class SB01ConversationLoop:
 
     def _ask_claude(self, user_text: str, emotion: str) -> str:
         context_parts = []
+
+        # reply language: follow the speaker, but a short or unclear phrase never
+        # switches it - a misheard phrase is answered in the language last spoken
+        heard = detect_language(user_text)
+        if heard != self.language and is_clear_language(user_text, heard):
+            print(f"[language] {LANGUAGE_NAMES[self.language]} -> {LANGUAGE_NAMES[heard]}")
+            self.language = heard
+        context_parts.append(f"[Reply in {LANGUAGE_NAMES[self.language]}.]")
 
         # weather injection
         if set(user_text.lower().split()) & WEATHER_KEYWORDS:
@@ -471,13 +549,15 @@ class SB01ConversationLoop:
 
                 try:
                     reply, emotion_led = self._ask_claude(user_text, emotion)
+                    reply_language = self.language
                 except Exception as exc:
                     print(f"[error]  Claude API: {exc}")
                     reply = "Sorry, I had trouble with that. Could you say it again?"
                     emotion_led = (0, 0, 0)
+                    reply_language = None     # the fixed apology is English
 
                 print(f"[{ROBOT_NAME}]  {reply}")
-                self._speak(reply)
+                self._speak(reply, language=reply_language)   # Claude's reply is in the conversation language
                 self.audio.LedControl(0, 128, 0)
 
             except KeyboardInterrupt:
