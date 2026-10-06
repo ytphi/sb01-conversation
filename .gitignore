@@ -42,3 +42,10 @@ record/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Monitoring data lives in the system temp folder, never here. Safety net in case
+# a report is saved into the project folder: never commit reports or old logs.
+logs/
+sb01_team1_*.zip
+sb01_security_*.zip
+sb01_transcript_*.zip

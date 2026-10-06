@@ -17,6 +17,9 @@ class FaceIdentifier:
         self.known_encodings = []
         self.known_names = []
         self._window_running = False
+        # Outcome metadata of the last identify() for monitoring. Never holds
+        # images, encodings or distances - only a coarse confidence category.
+        self.last_result: dict = {"outcome": "not_run"}
         if _AVAILABLE:
             self._load_enrolled()
 
@@ -35,16 +38,20 @@ class FaceIdentifier:
 
     def identify(self, camera_index: int = 0, attempts: int = 10, tolerance: float = 0.5) -> str | None:
         """Capture frames from camera and return matched name, or None if unknown."""
+        enrolled = len(self.known_encodings)
         if not _AVAILABLE:
             print("[face_id] face_recognition not installed — skipping")
+            self.last_result = {"outcome": "unavailable", "enrolled": 0}
             return None
         if not self.known_encodings:
             print("[face_id] no enrolled faces — skipping")
+            self.last_result = {"outcome": "no_enrolled", "enrolled": 0}
             return None
 
         cap = cv2.VideoCapture(camera_index)
         if not cap.isOpened():
             print("[face_id] cannot open camera")
+            self.last_result = {"outcome": "camera_failed", "enrolled": enrolled}
             return None
 
         # discard first frames while camera warms up
@@ -52,14 +59,23 @@ class FaceIdentifier:
             cap.read()
 
         matched = None
+        best = None          # smallest distance seen; used only for a coarse category
+        faces_seen = frames = 0
         for _ in range(attempts):
             ret, frame = cap.read()
             if not ret:
                 continue
+            frames += 1
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             locations = face_recognition.face_locations(rgb)
             encodings = face_recognition.face_encodings(rgb, locations)
+            faces_seen += len(encodings)
             for enc in encodings:
+                try:
+                    distance = float(min(face_recognition.face_distance(self.known_encodings, enc)))
+                    best = distance if best is None else min(best, distance)
+                except Exception:
+                    pass
                 matches = face_recognition.compare_faces(
                     self.known_encodings, enc, tolerance=tolerance
                 )
@@ -70,6 +86,16 @@ class FaceIdentifier:
                 break
 
         cap.release()
+        if matched:
+            outcome = "recognized"
+        elif faces_seen:
+            outcome = "unrecognized"
+        else:
+            outcome = "no_face"
+        confidence = ("none" if best is None or best > tolerance
+                      else "strong" if best < 0.4 else "moderate")
+        self.last_result = {"outcome": outcome, "confidence": confidence, "enrolled": enrolled,
+                            "faces_seen": faces_seen, "frames": frames}
         return matched
 
     def start_live_window(self, camera_index: int = 0, tolerance: float = 0.5):
