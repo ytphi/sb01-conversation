@@ -1,0 +1,69 @@
+# Speech framework defaults. To override locally without touching this file,
+# create config.local.yaml next to it (gitignored) with just the keys you change.
+
+robot:
+  name: sb01
+  network_interface: eno0
+  asr_topic: rt/audio_msg
+  volume: 100
+  # After the robot speaks, how long it stays deaf (so it doesn't hear itself):
+  playback_grace_s: 0.5       # max wait past the audio's length for play_state 0
+  echo_tail_s: 0.3            # extra pause for the room echo to die
+
+stt:
+  source: g1-mic              # g1-mic | pc-mic | g1-asr  (override with --stt)
+  engine: faster-whisper
+  whisper:
+    model: small              # tiny | base | small | distil-large-v3 (en only) | large-v3-turbo
+    device: auto              # auto | cuda | cpu
+    compute_type: default     # default | float16 | int8_float16 | int8
+    language: null            # null = auto-detect; or en / zh / ja / es to force one
+    beam_size: 1
+  vad:                        # Silero VAD end-of-turn detection (g1-mic / pc-mic)
+    threshold: 0.5
+    min_silence_ms: 500       # silence that ends a turn (onboard ASR: ~1-2 s, fixed)
+    preroll_ms: 300
+    max_utterance_s: 20
+  g1_mic:                     # robot mic multicast (Unitree G1 audio docs)
+    local_ip: 192.168.123.222 # this PC's address on eno0
+    group: 239.168.123.161
+    port: 5555
+  pc_mic:
+    device: null              # null = default input; or a sounddevice name / index
+  g1_asr:
+    debounce_s: 0.8           # accept a partial if is_final hasn't arrived by then
+
+llm:
+  provider: gemini            # gemini | deepseek | claude
+  providers:
+    gemini:
+      model: gemini-3.8-flash
+      max_tokens: 4096        # Gemini counts thinking tokens against this budget
+      thinking_level: low
+    deepseek:
+      model: deepseek-chat
+      max_tokens: 256
+      base_url: https://api.deepseek.com
+    claude:
+      model: claude-sonnet-5-5
+      max_tokens: 4096
+
+conversation:
+  persona: ../utilities/persona-defs/sb01_default.txt
+  # In-session context only (no persistent memory). 0 = every turn stands alone.
+  max_history_turns: 6
+  default_language: en
+  greeting: "Hi! I'm sb01. What's up?"
+
+tts:
+  device: auto                # auto | cuda | cpu | mps
+  preload: true               # load models at startup instead of on first use
+  multilingual_t3_model: v3
+  # Per-language engine + voice. voice: null = model's built-in voice;
+  # otherwise a path to a reference clip (see utilities/voice-refs/README.md).
+  # Any extra keys are passed straight to the model's generate().
+  languages:
+    en: { engine: nano,         voice: null }
+    zh: { engine: multilingual, voice: null, exaggeration: 0.5, cfg_weight: 0.5 }
+    ja: { engine: multilingual, voice: null, exaggeration: 0.5, cfg_weight: 0.5 }
+    es: { engine: multilingual, voice: null, exaggeration: 0.5, cfg_weight: 0.5 }

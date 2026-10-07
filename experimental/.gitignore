@@ -1,0 +1,7 @@
+# Local overrides for the speech framework
+speech-framework/config.local.yaml
+
+# Voice reference clips (may be real people's voices)
+utilities/voice-refs/*.wav
+utilities/voice-refs/*.mp3
+utilities/voice-refs/*.flac
