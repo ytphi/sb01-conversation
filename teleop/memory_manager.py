@@ -24,7 +24,7 @@ class MemoryManager:
         if os.path.exists(path):
             with open(path) as f:
                 return json.load(f)
-        return {"name": name, "facts": [], "preferences": []}
+        return {"name": name, "facts": [], "preferences": [], "memory_consent": None}
 
     def save_profile(self, name: str, profile: dict):
         with open(self._profile_path(name), "w") as f:
@@ -36,6 +36,17 @@ class MemoryManager:
         profile["facts"] = list(existing | set(new_facts))
         self.save_profile(name, profile)
 
+    # ── consent ──────────────────────────────────────────────────────────────
+    # Per-person opt-in for saving conversation memory. `None` means "never asked".
+
+    def get_consent(self, name: str) -> bool | None:
+        return self.load_profile(name).get("memory_consent")
+
+    def set_consent(self, name: str, consent: bool):
+        profile = self.load_profile(name)
+        profile["memory_consent"] = consent
+        self.save_profile(name, profile)
+
     # ── sessions ─────────────────────────────────────────────────────────────
 
     def _sessions_dir(self, name: str) -> str:
@@ -45,19 +56,38 @@ class MemoryManager:
 
     def load_recent_sessions(self, name: str, n: int = 3) -> str:
         sdir = self._sessions_dir(name)
-        files = sorted(f for f in os.listdir(sdir) if f.endswith(".txt"))[-n:]
+        files = sorted(
+            f for f in os.listdir(sdir) if f.endswith(".txt") or f.endswith(".json")
+        )[-n:]
         parts = []
         for fname in files:
-            with open(os.path.join(sdir, fname)) as f:
-                date_label = fname.replace(".txt", "").replace("_", " ")
-                parts.append(f"[{date_label}] {f.read().strip()}")
+            path = os.path.join(sdir, fname)
+            if fname.endswith(".json"):
+                with open(path) as f:
+                    record = json.load(f)
+                label = f"[{record.get('date', fname)}]"
+                if record.get("topic"):
+                    label += f" ({record['topic']})"
+                parts.append(f"{label} {record.get('summary', '').strip()}")
+            else:
+                # legacy plain-text session file (no topic/date metadata)
+                with open(path) as f:
+                    date_label = fname.replace(".txt", "").replace("_", " ")
+                    parts.append(f"[{date_label}] {f.read().strip()}")
         return "\n".join(parts)
 
-    def save_session_summary(self, name: str, summary: str):
+    def save_session_summary(self, name: str, summary: str, topic: str = ""):
         sdir = self._sessions_dir(name)
-        stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
-        with open(os.path.join(sdir, f"{stamp}.txt"), "w") as f:
-            f.write(summary)
+        now = datetime.now()
+        stamp = now.strftime("%Y-%m-%d_%H%M")
+        record = {
+            "name": name,
+            "date": now.strftime("%Y-%m-%d %H:%M"),
+            "topic": topic,
+            "summary": summary,
+        }
+        with open(os.path.join(sdir, f"{stamp}.json"), "w") as f:
+            json.dump(record, f, indent=2)
 
     # ── context builder ───────────────────────────────────────────────────────
 

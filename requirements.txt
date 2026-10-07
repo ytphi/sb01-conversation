@@ -17,5 +17,11 @@ h5py
 # Robot camera
 opencv-python
 
+# sb01 conversation: local knowledge base (lecture/paper/CV PDFs)
+pypdf
+
 # Config
 pyyaml
+python-pptx
+python-docx
+openpyxl

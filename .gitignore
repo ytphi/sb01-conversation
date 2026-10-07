@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+.cyclonedds-home/
 
 # Environment / secrets
 .env
@@ -17,6 +18,10 @@ unitree_sdk2_python/
 memory/faces/
 memory/profiles/
 memory/sessions/
+memory/lectures/
+memory/papers/
+memory/course_files/
+memory/.knowledge_cache.pkl
 
 # Teleoperation / GMR scripts (separate from conversation demo)
 scripts/teleop_session.py
@@ -42,3 +47,6 @@ record/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Team 1 traffic captures (never commit)
+data/traffic/
