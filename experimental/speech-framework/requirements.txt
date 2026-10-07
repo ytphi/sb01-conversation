@@ -12,7 +12,11 @@ anthropic             # claude
 # TTS: Chatterbox Nano + Multilingual (pulls in torch / torchaudio)
 chatterbox-tts
 
-# Local test mode only (non-robot-testmode/run_local.py)
+# STT on the PC (stt.source: g1-mic / pc-mic). Not needed for g1-asr.
+faster-whisper
+silero-vad
+
+# PC audio: local test mode (non-robot-testmode/run_local.py) and stt.source: pc-mic
 sounddevice
 soundfile
 

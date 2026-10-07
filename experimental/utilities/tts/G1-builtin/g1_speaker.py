@@ -19,9 +19,12 @@ LED_SPEAKING  = (0, 0, 128)
 
 
 class G1Speaker:
-    def __init__(self, app_name: str = "sb01", volume: int = 100):
+    def __init__(self, app_name: str = "sb01", volume: int = 100,
+                 playback_grace_s: float = 0.5, echo_tail_s: float = 0.3):
         self.app_name      = app_name
         self.volume        = volume
+        self.playback_grace_s = playback_grace_s   # max wait past the audio's length for play_state 0
+        self.echo_tail_s      = echo_tail_s        # extra deaf time for the room echo to die
         self.audio         = AudioClient()
         self.speaking      = threading.Event()   # shared with G1ASRInput
         self.playback_done = threading.Event()   # set by G1ASRInput on play_state == 0
@@ -41,13 +44,17 @@ class G1Speaker:
             self.led(LED_SPEAKING)
             stream_id = str(int(time.time() * 1000))
             total = len(pcm)
+            t_start = time.time()
             for offset in range(0, total, PCM_CHUNK_BYTES):
                 self.audio.PlayStream(self.app_name, stream_id,
                                       list(pcm[offset:offset + PCM_CHUNK_BYTES]))
                 if offset + PCM_CHUNK_BYTES < total:
                     time.sleep(1.0)
-            self.playback_done.wait(timeout=total / (PCM_SAMPLE_RATE * 2) + 3.0)
-            time.sleep(0.4)      # let the room echo die before listening again
+            # play_state 0 isn't guaranteed for PlayStream, so don't wait much past
+            # the audio's own length (playback starts with the first chunk)
+            expected_end = t_start + total / (PCM_SAMPLE_RATE * 2) + self.playback_grace_s
+            self.playback_done.wait(timeout=max(expected_end - time.time(), 0.0))
+            time.sleep(self.echo_tail_s)
         finally:
             self.led(LED_OFF)
             self.speaking.clear()

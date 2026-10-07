@@ -11,6 +11,7 @@ in the keyboard + local speakers. Swap either side without touching the loop.
 """
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -89,6 +90,8 @@ def run_conversation(conv: Conversation, inp: SpeechInput, out: SpeechOutput,
         if user_text is None:
             break
         print(f"[user/{detect_language(user_text, conv.default_language)}]  {user_text}")
+        t0 = time.time()
         reply = conv.respond(user_text)
+        print(f"[timing] llm {time.time() - t0:.2f}s")
         print(f"[{robot_name}/{reply.language}]  {reply.text}")
         out.speak(reply.text, reply.language)

@@ -46,6 +46,27 @@ sudo apt install ffmpeg
 python3 scripts/sb01_conversation.py eno0
 ```
 
+### 2026-10-07 — Latency: fixed delays + PC-side STT (experimental/speech-framework)
+
+**Hypothesis (not yet measured):** most of the delay from the user finishing speaking
+to the robot replying comes from
+1. fixed waits in our code: 1.5 s debounce on ASR partials, and up to ~3.4 s+ of
+   ignoring the mic after playback when `play_state: 0` doesn't arrive for `PlayStream`
+2. the G1's onboard ASR: waits ~1-2 s of silence before `is_final` (not tunable), and
+   accuracy is mixed (probably SenseVoice-based, judging by the `<|HAPPY|>` tags; unconfirmed)
+
+**Changes:**
+- Fixed waits are now config values: debounce 0.8 s, post-playback wait = audio length
+  + `playback_grace_s` (0.5 s) + `echo_tail_s` (0.3 s)
+- New `stt.source`: `g1-mic` (default, robot mics → PC), `pc-mic`, or `g1-asr` (old path).
+  PC-side = Silero VAD (500 ms silence ends the turn) + faster-whisper (`small`)
+- `[timing]` log lines for stt / llm / tts
+- `non-robot-testmode/run_local.py --mic` to test STT without the robot
+
+**To verify on the robot:** G1 mic multicast address (239.168.123.161:5555 from Unitree docs),
+whether `play_state: 0` arrives for `PlayStream`, Whisper speed on the Linux PC (GPU or CPU),
+and the `[timing]` breakdown for a few turns.
+
 ---
 
 ## Pending / Next Steps

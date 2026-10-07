@@ -11,6 +11,7 @@ pip install -r experimental/speech-framework/requirements.txt
 |---|---|
 | `python non-robot-testmode/run_local.py --text-only` | LLM provider only (no torch/Chatterbox needed) |
 | `python non-robot-testmode/run_local.py` | Full loop: LLM + TTS + playback |
+| `python non-robot-testmode/run_local.py --mic` | Full loop with speech input (PC mic → Silero VAD → faster-whisper) |
 | `python non-robot-testmode/run_local.py --provider deepseek` | Another provider |
 | `python non-robot-testmode/run_local.py --save-wav non-robot-testmode/out --no-play` | Write replies to .wav |
 | `python non-robot-testmode/run_local.py --say "Hola, ¿cómo estás?"` | TTS only, auto-detected language |

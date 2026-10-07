@@ -5,7 +5,7 @@ Messages are JSON in a String_:
   {"text": ..., "is_final": bool, "emotion": "<|HAPPY|>", ...}   ASR result
   {"play_state": 1 | 0}                                           robot playback start / finish
 
-Partials are debounced (1.5 s) because is_final sometimes never arrives.
+Partials are debounced (debounce_s, 0.8 s by default) because is_final sometimes never arrives.
 Anything heard while the robot is speaking is dropped so it doesn't hear itself.
 """
 
@@ -21,7 +21,7 @@ ASR_TOPIC = "rt/audio_msg"
 
 class G1ASRInput:
     def __init__(self, speaking: threading.Event, playback_done: threading.Event,
-                 topic: str = ASR_TOPIC, debounce_s: float = 1.5, min_chars: int = 2):
+                 topic: str = ASR_TOPIC, debounce_s: float = 0.8, min_chars: int = 2):
         self.speaking      = speaking
         self.playback_done = playback_done
         self.topic         = topic

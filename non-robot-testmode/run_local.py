@@ -2,11 +2,12 @@
 """
 run_local.py  -  test the experimental speech framework without the robot (Ubuntu or Windows)
 
-  keyboard input → LLM provider → Chatterbox TTS → PC speakers (and/or .wav files)
+  keyboard (or PC mic + Whisper) → LLM provider → Chatterbox TTS → PC speakers (and/or .wav files)
 
 Usage:
   python non-robot-testmode/run_local.py                          # type, hear replies
   python non-robot-testmode/run_local.py --text-only              # LLM only, no TTS install needed
+  python non-robot-testmode/run_local.py --mic                    # talk instead of type
   python non-robot-testmode/run_local.py --provider claude --save-wav out/
   python non-robot-testmode/run_local.py --say "こんにちは、元気ですか？"   # TTS only, no LLM
 """
@@ -14,6 +15,7 @@ Usage:
 import argparse
 import os
 import sys
+import threading
 import time
 
 # Windows consoles default to cp1252, which can't print Chinese / Japanese replies
@@ -56,6 +58,7 @@ class LocalVoice:
         self.synth    = synth
         self.play     = play
         self.save_dir = save_dir
+        self.speaking = threading.Event()        # mic input ignores audio while set
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
 
@@ -70,14 +73,21 @@ class LocalVoice:
             print(f"[tts] saved {path}")
         if self.play:
             import sounddevice as sd
-            sd.play(wav, sr)
-            sd.wait()
+            self.speaking.set()
+            try:
+                sd.play(wav, sr)
+                sd.wait()
+                time.sleep(0.3)                  # let the room echo die
+            finally:
+                self.speaking.clear()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     add_common_args(parser)
     parser.add_argument("--text-only", action="store_true", help="skip TTS entirely")
+    parser.add_argument("--mic", action="store_true",
+                        help="speak into the PC mic (Silero VAD + faster-whisper) instead of typing")
     parser.add_argument("--no-play", action="store_true", help="don't play audio (use with --save-wav)")
     parser.add_argument("--save-wav", metavar="DIR", help="also write each reply to DIR/*.wav")
     parser.add_argument("--say", metavar="TEXT", help="synthesize TEXT once and exit (no LLM)")
@@ -102,8 +112,15 @@ def main():
             synth.preload()
         out = LocalVoice(synth, play=not args.no_play, save_dir=args.save_wav)
 
+    if args.mic:
+        from speech_recog import make_local_asr
+        inp = make_local_asr(cfg["stt"], "pc-mic", getattr(out, "speaking", threading.Event()))
+        inp.start()
+    else:
+        inp = KeyboardInput()
+
     try:
-        run_conversation(conv, KeyboardInput(), out,
+        run_conversation(conv, inp, out,
                          greeting=cfg["conversation"].get("greeting"),
                          robot_name=cfg["robot"]["name"])
     except KeyboardInterrupt:
