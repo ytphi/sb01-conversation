@@ -168,13 +168,37 @@ Measured on the development laptop (RTX 3050, 6 GB):
 | Chatterbox alone on the card | about 5.7 of 6 GB | 1.4 to 2.4 s |
 | Gesture server alone on the card | about 1.3 GB | (not applicable) |
 | Both on the card | full (6.0 of 6 GB) | 5 to 12 s, in two test sessions |
-| Chatterbox on the processor, gesture server on the card | about 1.3 GB | 6 to 17 s for one sentence; 23 to 39 s for four sentences (12 s of speech); about 40 s for the first reply after startup |
+| Chatterbox on the processor, gesture server on the card | about 1.3 GB | see "Speed on the processor" below |
 
 Sharing a 6 GB card ran without crashing in those two sessions, but with the memory full and the voice
 several times slower. That is not evidence it is reliable, so it is not supported and is no longer what
 `auto` does. For Chatterbox on a graphics card, use one with clearly more than 8 GB or run the gesture
-server on another machine. On the processor the voice works, but the robot is silent for the whole time
-in the table before each reply, which is slow for conversation. Loading at startup took 48 to 114 s.
+server on another machine.
+
+**Speed on the processor** (i5-13420H, 6 threads; time to synthesize, during which the robot is silent):
+
+| What | Nothing else running | Other programs using the processor |
+|---|---|---|
+| Loading at startup | 29 to 41 s | 48 to 114 s |
+| One English sentence (about 3 s of speech, nano engine) | 4 to 6 s | 6 to 17 s |
+| Four English sentences (about 12 s of speech) | 14 s in one piece, 17 s sentence by sentence | 23 to 39 s |
+| One Spanish sentence (about 2.5 s of speech, multilingual engine) | 15 to 19 s | 14 to 15 s measured |
+
+The right-hand column is from the first measurements, taken while other test jobs were running; the
+"about 40 s for the first reply" seen then was not reproduced on an idle machine (first reply 5.6 s, later
+ones 4.3 s). Claude's own reply time comes on top of these. This is too slow for live conversation, most of
+all in Spanish and Chinese. No safe software change was found that makes it faster:
+- the models are loaded once at startup (preload works) and the same model objects serve every reply;
+- settings are read once (0.3 s);
+- everything this project adds around the model (checks, trimming, conversion) takes about 2 ms per reply;
+- the model already produces 24 kHz audio, so the gesture audio is not resampled;
+- the processor thread count PyTorch picks (6) was the fastest of 3, 6 and 12;
+- synthesizing sentence by sentence costs about 20% more, and is only done when teaching gestures are on,
+  where it is needed to time them;
+- a warm-up synthesis at startup was tried and dropped: it saved about 1 s on the first reply and added
+  12 s to startup.
+A faster voice needs hardware: a graphics card with clearly more than 8 GB, or the gesture server on
+another machine so Chatterbox can have the card.
 
 Limits of what was checked:
 - The free-memory check could only be exercised here as "a 6 GB card is refused". Under Windows/WSL the
@@ -183,10 +207,17 @@ Limits of what was checked:
 - A real out-of-memory error could not be produced on the laptop: with the card deliberately filled and the
   check lowered, the driver let Chatterbox spill into ordinary memory instead of failing. The handling of that
   error (reason printed, models released, Edge TTS speaks) is covered by tests with a stand-in engine only.
-- In a four-sentence reply with a pointing gesture, the arm moved toward the pointing pose in the right
-  sentence but stopped 0.4 to 0.6 rad short of it (it starts 0.9 rad away); the collision filter held the
-  shoulder back. The same reply with Edge TTS audio stopped 0.1 to 0.3 rad short. The gesture code is
-  unchanged by this work; this is noted, not fixed.
+- Known limitation, pointing gesture (not caused by Chatterbox; gesture code unchanged since `f2016e7`).
+  The pointing gesture does not always reach its full pose. In simulation, 16 placements across a
+  four-sentence reply (both arms, Edge TTS audio and Chatterbox audio) ended 0.08 to 0.32 rad from the pose
+  (median 0.18; the arm starts 0.90 rad away), and where it fell shortest it also arrived about 0.4 s after
+  the planned time. The worst case was the same with both voices (0.32 rad, on the word "diagram" in the
+  second sentence). By design the cue only asks for 85% of the pose (within 0.09 to 0.20 rad); the rest of
+  the shortfall is the collision filter holding the shoulder yaw at its safety margin. The command is not
+  interrupted: with a stand-in robot every frame the server sent was commanded by the client, with no fault.
+  The motion is repeatable (identical on a second run) and stays within the 0.05 rad/frame speed limit.
+  One earlier combined run with Chatterbox ended 0.57 rad short; that was not reproduced. Nothing was changed:
+  reaching farther would mean loosening the collision margins. Short replies point more fully than long ones.
 
 **Installation (changed after review).** `experimental/speech-framework/requirements.txt` now pins
 Chatterbox to commit `5de7a54aa4e5e2baadb0182dde554908b48b85c2` of its GitHub repository. The framework
@@ -196,6 +227,11 @@ not have. Installing from that file was tested in a new environment (Python 3.10
 **Monitoring.** Session monitoring is not included in this branch, and this work neither adds nor changes
 it. Combining the Chatterbox voice with monitoring is a separate future step. No monitoring behavior was
 validated by this work, on the robot or otherwise.
+
+**Housekeeping.** `.claude/settings.local.json` (one machine's Claude Code permissions, with `/home/aloha/`
+paths; no credentials) is no longer tracked and is in `.gitignore`. Pulling this change removes that file
+from a checkout that still has it unmodified; keep a copy first if it is wanted. The speech framework's
+install was tested with Python 3.10; Python 3.11 is not yet validated.
 
 **Tests:** `python3 -m unittest discover` runs everything (`tests/__init__.py` was added so that works);
 `python3 -m unittest tests.test_voice` runs the Chatterbox tests with a stand-in engine. Also checked with

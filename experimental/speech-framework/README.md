@@ -40,7 +40,7 @@ The only "memory" is the last few turns of the current session (`max_history_tur
 ## Setup
 
 ```bash
-python3.11 -m venv .venv && source .venv/bin/activate
+python3.10 -m venv .venv && source .venv/bin/activate   # tested with Python 3.10; 3.11 is not yet validated
 pip install -r experimental/speech-framework/requirements.txt   # needs git: Chatterbox is pinned to one commit
 cp experimental/speech-framework/.env.example experimental/speech-framework/.env   # add your key(s)
 ```

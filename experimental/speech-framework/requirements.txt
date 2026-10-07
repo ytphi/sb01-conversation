@@ -1,5 +1,6 @@
 # Experimental speech framework (experimental/speech-framework)
-# Chatterbox is developed/tested on Python 3.11 - use a 3.11 venv.
+# Use a Python 3.10 venv: this file was installed and tested with Python 3.10.
+# Python 3.11 (which Chatterbox's authors develop on) is not yet validated with this pinned install.
 
 pyyaml
 numpy
@@ -13,7 +14,7 @@ anthropic             # claude
 # Pinned to an exact commit of the Chatterbox repository: the framework uses
 # from_pretrained(nano=...) and from_pretrained(t3_model=...), which the 0.1.7
 # release on PyPI does not have (this commit also calls itself 0.1.7).
-# Needs git on the machine. Tested with Python 3.10.
+# Needs git on the machine.
 chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2
 
 # STT on the PC (stt.source: g1-mic / pc-mic). Not needed for g1-asr.

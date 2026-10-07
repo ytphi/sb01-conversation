@@ -111,7 +111,7 @@ By default the robot speaks with Microsoft Edge TTS. To use the Chatterbox voice
 `experimental/speech-framework` instead:
 
 ```bash
-# once, in the Python environment the conversation program runs in (needs git; tested with Python 3.10)
+# once, in the Python environment the conversation program runs in (needs git; tested with Python 3.10, Python 3.11 is not yet validated)
 pip install -r experimental/speech-framework/requirements.txt
 
 SB01_VOICE=chatterbox python3 scripts/sb01_conversation.py enp2s0
@@ -127,8 +127,11 @@ the 0.1.7 release on PyPI lacks options the speech framework uses. The first sta
 - **Fallback.** If Chatterbox cannot load or cannot say a reply, the program says why and uses Edge TTS.
 - **Where it runs.** Chatterbox runs on the processor by default, because its models need about 5.7 GB of
   graphics memory and the gesture server uses the same card. On a processor it is slow: the robot is silent
-  while a reply is synthesized, and on the development laptop that took 6 to 17 seconds for one sentence and
-  23 to 39 seconds for four (about 40 seconds for the first reply after startup).
+  while a reply is synthesized. On the development laptop with nothing else running that took 4 to 6 seconds
+  for one English sentence, 14 to 17 seconds for four, and 15 to 19 seconds for one Spanish sentence (the
+  multilingual engine is slower); two to three times longer when other programs were using the processor.
+  That is too slow for live conversation. For that, Chatterbox needs a graphics card with clearly more than
+  8 GB, or the gesture server has to run on another machine.
   `SB01_CHATTERBOX_DEVICE=cuda` puts it on the graphics card only if at least 7 GB of its memory is free;
   otherwise it stays on the processor and says so. Sharing a 6 GB card with the gesture server is not supported.
 - **Monitoring:** monitoring is not included in this branch. Monitoring integration is a separate future step.

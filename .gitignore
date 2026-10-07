@@ -39,6 +39,9 @@ teleop/live_viewer.py
 # Recorded episodes
 record/
 
+# Claude Code settings for one machine (permissions, local paths)
+.claude/settings.local.json
+
 # Editor / OS
 .DS_Store
 *.swp
