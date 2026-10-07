@@ -55,6 +55,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from teleop.face_id import FaceIdentifier
 from teleop.memory_manager import MemoryManager
 from teleop.gesture_client import GestureClient, GESTURE_SAMPLE_RATE
+from teleop import gesture_cues
 
 # ── config ───────────────────────────────────────────────────────────────────
 NETWORK_INTERFACE = "eno0"
@@ -74,6 +75,25 @@ GESTURE_URL = os.environ.get("SB01_GESTURE_URL", "").strip()
 # Motion is delayed by the speaker's measured start-up time so it lands on the
 # first sound. Never by more than this, in case that measurement is off.
 AUDIO_LATENCY_MAX = 0.5
+# Fixed poses between speech, off unless listed: SB01_GESTURE_POSES=thinking raises
+# the "thinking" pose while the reply is being worked out. Needs SB01_GESTURE_URL.
+GESTURE_POSES = {p.strip() for p in os.environ.get("SB01_GESTURE_POSES", "").split(",") if p.strip()}
+THINKING_POSE_SECONDS = 6.0   # longest the pose is held if the reply is slow
+# Teaching gestures, off unless SB01_GESTURE_CUES=1: Claude may mark a word in its
+# reply ("look at the [point] diagram") and the arm gesture arrives on that word.
+# SB01_BOARD_SIDE=left|right says where the board or screen is, for pointing.
+GESTURE_CUES = os.environ.get("SB01_GESTURE_CUES", "").strip() == "1" and bool(GESTURE_URL)
+_POINT_CUE = "point_right" if os.environ.get("SB01_BOARD_SIDE", "left").strip().lower() == "right" else "point"
+CUE_PROMPT = (
+    "\n\nYou can make a teaching gesture with your arms by putting a mark just before the word it "
+    "belongs with. The marks are never spoken. "
+    "[yes] when telling someone they are right. "
+    f"[{_POINT_CUE}] when referring to the board or screen beside you. "
+    "[one_hand] and later [other_hand] when contrasting two sides. "
+    "[small] and [big] for size or amount. "
+    "[ask] when inviting questions. "
+    "Use them only where a teacher naturally would: at most two in a reply, and most replies need none."
+)
 
 PRELOAD_URLS = [
     "https://www.csusb.edu/",
@@ -285,6 +305,7 @@ class SB01ConversationLoop:
     def __init__(self, interface: str, web_context: str):
         self.interface   = interface
         self.web_context = web_context
+        self._spoken_words: list = []   # (start seconds, word) of the current reply
         self.audio       = AudioClient()
         self.asr_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         self.speaking    = threading.Event()
@@ -321,6 +342,8 @@ class SB01ConversationLoop:
             prompt += f"\n\nWhat you know about this person:\n{ctx}"
         if self.web_context:
             prompt += f"\n\nReference information:\n{self.web_context}"
+        if GESTURE_CUES and self.gestures:
+            prompt += CUE_PROMPT
         return prompt
 
     def setup(self):
@@ -402,11 +425,14 @@ class SB01ConversationLoop:
         voice = self._pick_voice(text)
         if voice == VOICE_EN and language in ("es", "zh"):
             voice = LANGUAGE_VOICES[language]   # e.g. a Spanish reply with no accented letters
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = self._communicate(text, voice)
         mp3_chunks = []
+        self._spoken_words = []   # (start seconds, word): for gestures that arrive on a word
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 mp3_chunks.append(chunk["data"])
+            elif GESTURE_CUES and chunk["type"] == "WordBoundary":
+                self._spoken_words.append((chunk["offset"] / 1e7, chunk["text"]))
         mp3_data = b"".join(mp3_chunks)
         audio = AudioSegment.from_mp3(io.BytesIO(mp3_data))
         audio = audio.set_channels(1).set_sample_width(2)
@@ -415,6 +441,15 @@ class SB01ConversationLoop:
         )
         return audio.set_frame_rate(PCM_SAMPLE_RATE).raw_data, gesture_pcm
 
+    @staticmethod
+    def _communicate(text: str, voice: str):
+        if GESTURE_CUES:
+            try:
+                return edge_tts.Communicate(text, voice, boundary="WordBoundary")
+            except TypeError:
+                pass   # older edge-tts reports word times without being asked
+        return edge_tts.Communicate(text, voice)
+
     def _begin_gesture(self):
         """Start the motion so its first frame lands on the first sound, allowing
         for how long the speaker has recently taken to start playing."""
@@ -422,6 +457,22 @@ class SB01ConversationLoop:
         latency = recent[len(recent) // 2] if recent else 0.0
         self._play_called = time.time()
         self.gestures.begin(min(latency, AUDIO_LATENCY_MAX))
+
+    def _start_thinking(self) -> threading.Thread | None:
+        """Raise the "thinking" pose while the reply is worked out. It is asked
+        for beside the Claude request, so the reply is not kept waiting for it."""
+        if not self.gestures or "thinking" not in GESTURE_POSES:
+            return None
+        thread = threading.Thread(target=self.gestures.pose, args=("thinking", THINKING_POSE_SECONDS), daemon=True)
+        thread.start()
+        return thread
+
+    def _stop_thinking(self, thread: threading.Thread | None):
+        """The reply is in: the arm starts back down while the speech is synthesized."""
+        if thread is None:
+            return
+        thread.join()                    # the gesture client takes one call at a time
+        self.gestures.finish_pose()
 
     def _note_audio_started(self):
         called, self._play_called = self._play_called, None
@@ -433,13 +484,20 @@ class SB01ConversationLoop:
 
     def _speak(self, text: str, language: str | None = None):
         text = re.sub(r'\bCSUSB\b', 'Cal State San Bernardino', text, flags=re.IGNORECASE)
+        marks = []
+        if GESTURE_CUES:
+            text, marks = gesture_cues.split(text)   # the marks are never spoken
         self.speaking.set()
         self.tts_done.clear()
         try:
             self.audio.LedControl(0, 0, 128)
             pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text, language))
             # Arms are taken and the first second of motion is ready, or no gesture.
-            gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm)
+            cues = gesture_cues.timed(marks, self._spoken_words, text) if marks else []
+            if cues:
+                gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm, cues=cues)
+            else:
+                gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm)
 
             stream_id = str(int(time.time() * 1000))
             total = len(pcm)
@@ -584,6 +642,7 @@ class SB01ConversationLoop:
                 emotion_led = EMOTION_MAP.get(emotion, ((0, 0, 0), ""))[0]
                 self.audio.LedControl(*emotion_led)
 
+                thinking = self._start_thinking()
                 try:
                     reply, emotion_led = self._ask_claude(user_text, emotion)
                     reply_language = self.language
@@ -592,8 +651,10 @@ class SB01ConversationLoop:
                     reply = "Sorry, I had trouble with that. Could you say it again?"
                     emotion_led = (0, 0, 0)
                     reply_language = None     # the fixed apology is English
+                finally:
+                    self._stop_thinking(thinking)
 
-                print(f"[{ROBOT_NAME}]  {reply}")
+                print(f"[{ROBOT_NAME}]  {gesture_cues.split(reply)[0] if GESTURE_CUES else reply}")
                 self._speak(reply, language=reply_language)   # Claude's reply is in the conversation language
                 self.audio.LedControl(0, 128, 0)
 

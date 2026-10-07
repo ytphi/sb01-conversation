@@ -25,6 +25,14 @@ is stopped or closed.
 If the next utterance arrives while the arms are still returning, they are kept
 at rest (at whatever weight they had reached) and go straight into the next
 gesture.
+
+A fixed pose from the sidecar's list (e.g. "thinking") is played the same way,
+with the same checks:
+  pose(name, seconds)  move there and stay up to `seconds`, then back and release
+  finish_pose()        go back now instead of when the time is up
+The sidecar only plans the way there (and any slight sway while staying). The
+way back is always the way there in reverse, so the arms end exactly where they
+were taken.
 """
 
 import atexit
@@ -80,6 +88,7 @@ FLOAT_TOLERANCE = 1e-3          # float32 rounding on values clipped exactly to 
 MAX_STEP_RAD        = 0.05      # per frame, per joint: RoboGesture's own speed limit (1.5 rad/s)
 MAX_HOLD_OFFSET_RAD = 0.3       # how far the sidecar may place the hold pose from the measured arms
 MAX_BLOCK_FRAMES    = 300       # one message never carries more than 10 s
+STILL_RAD           = 1e-4      # a frame this close to the one being commanded is "not moving"
 
 # Robot state in which gestures are sent. FSM 802 is what this G1 (sb01) reports
 # while standing in motion control, and the state in which arm gestures were run
@@ -194,6 +203,9 @@ class GestureClient:
         self._chain = threading.Event()   # next utterance is waiting: skip the release
         self._ready = threading.Event()   # arms taken and first block (or a failure) in
         self._go    = threading.Event()   # audio is starting
+        self._wrap  = threading.Event()   # the pose is no longer wanted: go back now
+        self._posing = False              # the current stream is a fixed pose, not speech
+        self._path_frames: int | None = None   # how many of a pose's frames are the way there
         self._ready_ok = False
         self._go_at = 0.0
         self._fault: str | None = None    # why the guard thread stopped the gesture
@@ -292,8 +304,12 @@ class GestureClient:
 
     # ── control ──────────────────────────────────────────────────────────────
 
-    def start(self, pcm: bytes, timeout: float = 10.0) -> bool:
-        """Prepare to gesture to this utterance (PCM16LE mono 24 kHz).
+    def start(self, pcm: bytes, timeout: float = 10.0, pose: str | None = None,
+              seconds: float = 0.0, cues: list | None = None) -> bool:
+        """Prepare to gesture to this utterance (PCM16LE mono 24 kHz), or, with
+        `pose`, to play that fixed pose for `seconds` (see pose()). `cues` are
+        teaching gestures for the sidecar to lay over the speech motion:
+        [{"name": ..., "time": seconds into the audio}].
 
         Returns True once the arms are held at full weight and the first second
         of motion is ready: send the audio and call begin(). Returns False if
@@ -310,14 +326,18 @@ class GestureClient:
             arms = held[:14] if held is not None else q[15:29]
             if held is None or self._waist is None:
                 self._waist = q[12:15].copy()
+            what = ({"pcm": base64.b64encode(pcm).decode()} if pose is None
+                    else {"pose": pose, "seconds": float(seconds)})
+            if cues and pose is None:
+                what["cues"] = list(cues)
             body = json.dumps({
-                "pcm":   base64.b64encode(pcm).decode(),
+                **what,
                 "legs":  q[0:12].tolist(),
                 "waist": self._waist.tolist(),
                 "arms":  np.asarray(arms, dtype=float).tolist(),
             }).encode()
             req = urllib.request.Request(
-                self.url + "/gesture", data=body,
+                self.url + ("/gesture" if pose is None else "/pose"), data=body,
                 headers={"Content-Type": "application/json"},
             )
             resp = urllib.request.urlopen(req, timeout=timeout)
@@ -338,9 +358,12 @@ class GestureClient:
                 self._release(held, 1.0 / EXPECTED_FPS)
             return False
 
-        for event in (self._stop, self._chain, self._ready, self._go):
+        for event in (self._stop, self._chain, self._ready, self._go, self._wrap):
             event.clear()
         self._ready_ok = False
+        self._posing = pose is not None
+        path = first.get("path")
+        self._path_frames = path if type(path) is int and path > 0 else None
         self._fault = None
         self.stats = {"blocks": 0, "validate_ms": [], "track_error_max": 0.0}
         frame_queue: queue.Queue = queue.Queue()
@@ -368,6 +391,22 @@ class GestureClient:
         """Start the motion `delay` seconds from now. Call as the audio is sent."""
         self._go_at = time.monotonic() + max(0.0, delay)
         self._go.set()
+
+    def pose(self, name: str, seconds: float = 5.0) -> bool:
+        """Move the arms to a fixed pose from the sidecar's list, stay there up
+        to `seconds`, then go back the way they came and release. Same state
+        checks, validation and faults as a speech gesture. Returns False if it
+        was refused."""
+        if not self.start(b"", pose=name, seconds=seconds):
+            return False
+        self.begin()
+        return True
+
+    def finish_pose(self):
+        """The pose is no longer wanted: the arms turn round now, wherever they
+        are on the way there, and go back through the frames already played.
+        If they are already on their way back, nothing changes."""
+        self._wrap.set()
 
     def wait(self):
         """Block until the current gesture has fully released the arms."""
@@ -538,16 +577,30 @@ class GestureClient:
             #    checks the robot is still there and following, and publishes.
             deadline = time.monotonic()
             stalled = 0.0
+            # A fixed pose: `trail` is the path played so far. When the stream
+            # ends, breaks or finish_pose() is called, `way_back` (the trail in
+            # reverse, then the release) is played instead of the stream.
+            trail = [track["last"]] if self._posing else None
+            taken = 0                 # frames of the stream played so far
+            way_back = None
             while not self._stop.is_set():
-                try:
-                    frame = frame_queue.get(timeout=interval)
-                except queue.Empty:
-                    # Sidecar is behind: hold the pose; motion resumes late.
-                    stalled += interval
-                    if stalled > STALL_SECONDS:
-                        print("[gesture] sidecar stalled, releasing arms")
-                        break
-                    self._publish(track["last"], track)
+                if trail is not None and self._wrap.is_set():
+                    way_back, trail = iter(self._way_back(trail, interval, track["last"])), None
+                if way_back is not None:
+                    frame = next(way_back, _END)
+                else:
+                    try:
+                        frame = frame_queue.get(timeout=interval)
+                    except queue.Empty:
+                        # Sidecar is behind: hold the pose; motion resumes late.
+                        stalled += interval
+                        if stalled > STALL_SECONDS:
+                            print("[gesture] sidecar stalled, releasing arms")
+                            break
+                        self._publish(track["last"], track)
+                        continue
+                if (frame is _END or frame is _ABORT) and trail is not None:
+                    way_back, trail = iter(self._way_back(trail, interval, track["last"])), None
                     continue
                 if frame is _END or frame is _ABORT:
                     break
@@ -556,6 +609,11 @@ class GestureClient:
                     # keep them instead of releasing and taking them again.
                     chained = True
                     break
+                if trail is not None:
+                    taken += 1
+                    on_the_way = self._path_frames is None or taken <= self._path_frames
+                    if on_the_way and float(np.abs(frame - trail[-1]).max()) >= STILL_RAD:
+                        trail.append(frame)    # not frames that stay put, nor sway at the pose
                 stalled = 0.0
                 delay = deadline - time.monotonic()
                 if delay > 0:
@@ -575,6 +633,26 @@ class GestureClient:
                 self._held = last
             elif last is not None and last[14] > 0.0:
                 self._release(last, interval)
+
+    @staticmethod
+    def _way_back(trail: list, interval: float, current: np.ndarray) -> list:
+        """Frames that take the arms back along `trail` (frames already played,
+        so already validated) to where they were taken, then ramp the weight to 0.
+        If the arms have swayed off the end of the trail, they first step straight
+        back onto it: a short line between two validated poses, in steps under
+        the speed limit."""
+        frames = []
+        gap = float(np.abs(current - trail[-1]).max())
+        if gap >= STILL_RAD:
+            steps = int(np.ceil(gap / (0.8 * MAX_STEP_RAD)))
+            frames = [current + (trail[-1] - current) * (step / steps) for step in range(1, steps + 1)]
+        frames += trail[-2::-1]
+        home = trail[0]
+        for blend in _smooth(np.linspace(0.0, 1.0, max(2, int(ABORT_RELEASE_SECONDS / interval)))):
+            frame = home.copy()
+            frame[14] = home[14] * (1.0 - blend)
+            frames.append(frame)
+        return frames
 
     def _release(self, last: np.ndarray, interval: float):
         """Hold the pose and ramp the weight to 0. Best effort: it keeps going
