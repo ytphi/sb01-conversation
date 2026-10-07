@@ -1,0 +1,107 @@
+Project:
+  Name: soc_ta
+  Version: ""
+  AssetDirectory: Assets
+  AssetRegistry: Assets/AssetRegistry.hzr
+  AudioCommandsRegistryPath: Assets/AudioCommandsRegistry.hzr
+  MeshPath: Assets/Meshes
+  MeshSourcePath: Assets/Meshes/Source
+  AnimationPath: Assets/Animation
+  ScriptClientProjectPath: Assets/Scripts/Client
+  ScriptServerProjectPath: Assets/Scripts/Server
+  ScriptModulePath: Assets/Scripts/Binaries
+  DefaultNamespace: SocTa
+  ScriptAssemblyName: SocTa
+  StartScene: Scenes/Main.hscene
+  AutomaticallyReloadAssembly: true
+  AutoSave: true
+  AutoSaveInterval: 60
+  Audio:
+    FileStreamingDurationThreshold: 30
+  Physics:
+    FixedTimestep: 0.00999999978
+    Gravity: [0, -9.81000042, 0]
+    SolverPositionIterations: 8
+    SolverVelocityIterations: 2
+    MaxBodies: 1000
+    CaptureOnPlay: true
+    CaptureMethod: 1
+  Log:
+    Agent:
+      Enabled: true
+      LevelFilter: Info
+    Animation:
+      Enabled: true
+      LevelFilter: Warn
+    Asset Pack:
+      Enabled: true
+      LevelFilter: Warn
+    AssetManager:
+      Enabled: true
+      LevelFilter: Info
+    AssetSystem:
+      Enabled: true
+      LevelFilter: Info
+    Assimp:
+      Enabled: true
+      LevelFilter: Error
+    Audio:
+      Enabled: true
+      LevelFilter: Error
+    Core:
+      Enabled: true
+      LevelFilter: Trace
+    Crash:
+      Enabled: true
+      LevelFilter: Trace
+    Data:
+      Enabled: true
+      LevelFilter: Trace
+    EditorLayer:
+      Enabled: true
+      LevelFilter: Info
+    GLFW:
+      Enabled: true
+      LevelFilter: Error
+    Memory:
+      Enabled: true
+      LevelFilter: Error
+    Mesh:
+      Enabled: true
+      LevelFilter: Warn
+    Motion:
+      Enabled: true
+      LevelFilter: Trace
+    Mujoco:
+      Enabled: true
+      LevelFilter: Trace
+    Observer:
+      Enabled: true
+      LevelFilter: Trace
+    Physics:
+      Enabled: true
+      LevelFilter: Info
+    Project:
+      Enabled: true
+      LevelFilter: Warn
+    Renderer:
+      Enabled: true
+      LevelFilter: Warn
+    Scene:
+      Enabled: true
+      LevelFilter: Info
+    ScriptBuilder:
+      Enabled: true
+      LevelFilter: Trace
+    Scripting:
+      Enabled: true
+      LevelFilter: Warn
+    Sound Spatializer:
+      Enabled: true
+      LevelFilter: Warn
+    Timer:
+      Enabled: false
+      LevelFilter: Trace
+    miniaudio:
+      Enabled: true
+      LevelFilter: Error

@@ -1,0 +1,89 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <TargetFramework>net9.0</TargetFramework>
+    <Configurations>Debug;Release;Dist</Configurations>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+    <OutputPath>..\Binaries\</OutputPath>
+    <IntermediateOutputPath>..\Intermediates\Debug\</IntermediateOutputPath>
+    <DefineConstants></DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>true</Optimize>
+    <OutputPath>..\Binaries\</OutputPath>
+    <IntermediateOutputPath>..\Intermediates\Release\</IntermediateOutputPath>
+    <DefineConstants></DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Dist|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
+    <OutputPath>..\Binaries\</OutputPath>
+    <IntermediateOutputPath>..\Intermediates\Dist\</IntermediateOutputPath>
+    <DefineConstants></DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <Reference Include="Hazel-ScriptCore">
+      <HintPath>\tmp\.mount_LuckyEJkPlMj\Data\Resources\Scripts\Hazel-ScriptCore.dll</HintPath>
+    </Reference>
+    <Reference Include="Coral.Managed">
+      <HintPath>\tmp\.mount_LuckyEJkPlMj\Data\Resources\Scripts\Coral.Managed.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <Reference Include="Hazel-ScriptCore">
+      <HintPath>\tmp\.mount_LuckyEJkPlMj\Data\Resources\Scripts\Hazel-ScriptCore.dll</HintPath>
+    </Reference>
+    <Reference Include="Coral.Managed">
+      <HintPath>\tmp\.mount_LuckyEJkPlMj\Data\Resources\Scripts\Coral.Managed.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup Condition=" '$(Configuration)|$(Platform)' == 'Dist|AnyCPU' ">
+    <Reference Include="Hazel-ScriptCore">
+      <HintPath>\tmp\.mount_LuckyEJkPlMj\Data\Resources\Scripts\Hazel-ScriptCore.dll</HintPath>
+    </Reference>
+    <Reference Include="Coral.Managed">
+      <HintPath>\tmp\.mount_LuckyEJkPlMj\Data\Resources\Scripts\Coral.Managed.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\ContentVault\Robots\UnitreeG1FiveFingers\Policies\rotator_Policy.cs">
+      <Link>ContentVault\Robots\UnitreeG1FiveFingers\Policies\rotator_Policy.cs</Link>
+    </Compile>
+    <Compile Include="..\..\ContentVault\Robots\UnitreeG1FiveFingers\Policies\walker_Policy.cs">
+      <Link>ContentVault\Robots\UnitreeG1FiveFingers\Policies\walker_Policy.cs</Link>
+    </Compile>
+  </ItemGroup>
+</Project>

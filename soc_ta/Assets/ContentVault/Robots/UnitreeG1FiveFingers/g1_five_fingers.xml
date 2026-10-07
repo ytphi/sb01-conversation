@@ -1,0 +1,683 @@
+<mujoco model="g1_29dof_five_fingers_rev_1_0">
+  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+
+  <!-- Solver settings copied verbatim from Trees' g1.xml. integrator="implicitfast"
+       is significantly more stable than the default Euler — without it, joints
+       with small inertia (especially the inspire-hand fingers, ~1e-7 kg·m²)
+       generate spurious constraint impulses that propagate up the kinematic
+       chain and faceplant the robot. -->
+  <option integrator="implicitfast" timestep="0.005" impratio="1.0" cone="pyramidal"
+          jacobian="auto" solver="Newton" iterations="10" tolerance="1e-08"
+          ls_iterations="20" ls_tolerance="0.01" gravity="0 0 -9.81"/>
+
+  <default>
+    <default class="g1">
+      <default class="visual">
+        <geom group="2" type="mesh" contype="0" conaffinity="0" density="0" material="metal"/>
+      </default>
+      <default class="collision">
+        <geom group="3" type="mesh"/>
+        <default class="finger_contact">
+          <geom friction="3 0.02 0.001"/>
+        </default>
+        <default class="foot">
+          <geom type="sphere" size="0.005"/>
+        </default>
+      </default>
+    </default>
+  </default>
+
+  <asset>
+    <material name="black" rgba="0.2 0.2 0.2 1"/>
+    <material name="metal" rgba="0.7 0.7 0.7 1"/>
+    <material name="white" rgba="1 1 1 1"/>
+
+    <mesh name="pelvis" file="pelvis.STL"/>
+    <mesh name="pelvis_contour_link" file="pelvis_contour_link.STL"/>
+    <mesh name="left_hip_pitch_link" file="left_hip_pitch_link.STL"/>
+    <mesh name="left_hip_roll_link" file="left_hip_roll_link.STL"/>
+    <mesh name="left_hip_yaw_link" file="left_hip_yaw_link.STL"/>
+    <mesh name="left_knee_link" file="left_knee_link.STL"/>
+    <mesh name="left_ankle_pitch_link" file="left_ankle_pitch_link.STL"/>
+    <mesh name="left_ankle_roll_link" file="left_ankle_roll_link.STL"/>
+    <mesh name="right_hip_pitch_link" file="right_hip_pitch_link.STL"/>
+    <mesh name="right_hip_roll_link" file="right_hip_roll_link.STL"/>
+    <mesh name="right_hip_yaw_link" file="right_hip_yaw_link.STL"/>
+    <mesh name="right_knee_link" file="right_knee_link.STL"/>
+    <mesh name="right_ankle_pitch_link" file="right_ankle_pitch_link.STL"/>
+    <mesh name="right_ankle_roll_link" file="right_ankle_roll_link.STL"/>
+    <mesh name="waist_yaw_link" file="waist_yaw_link_rev_1_0.STL"/>
+    <mesh name="waist_roll_link" file="waist_roll_link_rev_1_0.STL"/>
+    <mesh name="torso_link" file="torso_link_rev_1_0.STL"/>
+    <mesh name="logo_link" file="logo_link.STL"/>
+    <mesh name="head_link" file="head_link.STL"/>
+    <mesh name="left_shoulder_pitch_link" file="left_shoulder_pitch_link.STL"/>
+    <mesh name="left_shoulder_roll_link" file="left_shoulder_roll_link.STL"/>
+    <mesh name="left_shoulder_yaw_link" file="left_shoulder_yaw_link.STL"/>
+    <mesh name="left_elbow_link" file="left_elbow_link.STL"/>
+    <mesh name="left_wrist_roll_link" file="left_wrist_roll_link.STL"/>
+    <mesh name="left_wrist_pitch_link" file="left_wrist_pitch_link.STL"/>
+    <mesh name="left_wrist_yaw_link" file="left_wrist_yaw_link.STL"/>
+    <mesh name="right_shoulder_pitch_link" file="right_shoulder_pitch_link.STL"/>
+    <mesh name="right_shoulder_roll_link" file="right_shoulder_roll_link.STL"/>
+    <mesh name="right_shoulder_yaw_link" file="right_shoulder_yaw_link.STL"/>
+    <mesh name="right_elbow_link" file="right_elbow_link.STL"/>
+    <mesh name="right_wrist_roll_link" file="right_wrist_roll_link.STL"/>
+    <mesh name="right_wrist_pitch_link" file="right_wrist_pitch_link.STL"/>
+    <mesh name="right_wrist_yaw_link" file="right_wrist_yaw_link.STL"/>
+    <mesh name="L_hand_base_link" file="L_hand_base_link.STL"/>
+    <mesh name="L_thumb_proximal_base" file="Link11_L.STL"/>
+    <mesh name="L_thumb_proximal" file="Link12_L.STL"/>
+    <mesh name="L_thumb_intermediate" file="Link13_L.STL"/>
+    <mesh name="L_thumb_distal" file="Link14_L.STL"/>
+    <mesh name="L_index_proximal" file="Link15_L.STL"/>
+    <mesh name="L_index_intermediate" file="Link16_L.STL"/>
+    <mesh name="L_middle_proximal" file="Link17_L.STL"/>
+    <mesh name="L_middle_intermediate" file="Link18_L.STL"/>
+    <mesh name="L_ring_proximal" file="Link19_L.STL"/>
+    <mesh name="L_ring_intermediate" file="Link20_L.STL"/>
+    <mesh name="L_pinky_proximal" file="Link21_L.STL"/>
+    <mesh name="L_pinky_intermediate" file="Link22_L.STL"/>
+    <mesh name="R_hand_base_link" file="R_hand_base_link.STL"/>
+    <mesh name="R_thumb_proximal_base" file="Link11_R.STL"/>
+    <mesh name="R_thumb_proximal" file="Link12_R.STL"/>
+    <mesh name="R_thumb_intermediate" file="Link13_R.STL"/>
+    <mesh name="R_thumb_distal" file="Link14_R.STL"/>
+    <mesh name="R_index_proximal" file="Link15_R.STL"/>
+    <mesh name="R_index_intermediate" file="Link16_R.STL"/>
+    <mesh name="R_middle_proximal" file="Link17_R.STL"/>
+    <mesh name="R_middle_intermediate" file="Link18_R.STL"/>
+    <mesh name="R_ring_proximal" file="Link19_R.STL"/>
+    <mesh name="R_ring_intermediate" file="Link20_R.STL"/>
+    <mesh name="R_pinky_proximal" file="Link21_R.STL"/>
+    <mesh name="R_pinky_intermediate" file="Link22_R.STL"/>
+  </asset>
+
+  <worldbody>
+    <body name="pelvis" pos="0 0 0.793" childclass="g1">
+      <inertial pos="0 0 -0.07605" mass="3.813" fullinertia="0.010549 0.0093089 0.0079184 0 2.1e-06 0"/>
+      <joint name="floating_base_joint" type="free" limited="false" actuatorfrclimited="false"/>
+      <geom class="visual" material="black" mesh="pelvis"/>
+      <geom class="visual" mesh="pelvis_contour_link"/>
+      <geom class="collision" mesh="pelvis_contour_link"/>
+      <site name="imu_in_pelvis" size="0.01" pos="0.04525 0 -0.08339"/>
+      <body name="left_hip_pitch_link" pos="0 0.064452 -0.1027">
+        <inertial pos="0.002741 0.047791 -0.02606" mass="1.35" fullinertia="0.001811 0.0014193 0.0012812 3.68e-05 -3.44e-05 0.000171"/>
+        <joint name="left_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-2.5307 2.8798" actuatorfrcrange="-88 88" armature="0.01018"/>
+        <geom class="visual" material="black" mesh="left_hip_pitch_link"/>
+        <geom class="collision" mesh="left_hip_pitch_link"/>
+        <body name="left_hip_roll_link" pos="0 0.052 -0.030465" quat="0.996179 0 -0.0873386 0">
+          <inertial pos="0.029812 -0.001045 -0.087934" mass="1.52" fullinertia="0.0023773 0.0024123 0.0016595 -3.8e-06 -0.0003908 1.84e-05"/>
+          <joint name="left_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.5236 2.9671" actuatorfrcrange="-139 139" armature="0.02510"/>
+          <geom class="visual" mesh="left_hip_roll_link"/>
+          <geom class="collision" mesh="left_hip_roll_link"/>
+          <body name="left_hip_yaw_link" pos="0.025001 0 -0.12412">
+            <inertial pos="-0.057709 -0.010981 -0.15078" mass="1.702" fullinertia="0.0057774 0.0076124 0.003149 -0.0005411 -0.0023948 -0.0007072"/>
+            <joint name="left_hip_yaw_joint" pos="0 0 0" axis="0 0 1" range="-2.7576 2.7576" actuatorfrcrange="-88 88" armature="0.01018"/>
+            <geom class="visual" mesh="left_hip_yaw_link"/>
+            <geom class="collision" mesh="left_hip_yaw_link"/>
+            <body name="left_knee_link" pos="-0.078273 0.0021489 -0.17734" quat="0.996179 0 0.0873386 0">
+              <inertial pos="0.005457 0.003964 -0.12074" mass="1.932" fullinertia="0.011329 0.011277 0.0015168 4.82e-05 -4.49e-05 -0.0007146"/>
+              <joint name="left_knee_joint" pos="0 0 0" axis="0 1 0" range="-0.087267 2.8798" actuatorfrcrange="-139 139" armature="0.02510"/>
+              <geom class="visual" mesh="left_knee_link"/>
+              <geom class="collision" mesh="left_knee_link"/>
+              <body name="left_ankle_pitch_link" pos="0 -9.4445e-05 -0.30001">
+                <inertial pos="-0.007269 0 0.011137" mass="0.074" fullinertia="8.4e-06 1.89e-05 1.26e-05 0 -2.9e-06 0"/>
+                <joint name="left_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.87267 0.5236" actuatorfrcrange="-35 35" armature="0.00722"/>
+                <geom class="visual" mesh="left_ankle_pitch_link"/>
+                <geom class="collision" mesh="left_ankle_pitch_link"/>
+                <body name="left_ankle_roll_link" pos="0 0 -0.017558">
+                  <inertial pos="0.026505 0 -0.016425" mass="0.608" fullinertia="0.0002231 0.0016161 0.0016667 2e-07 8.91e-05 -1e-07"/>
+                  <joint name="left_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.2618 0.2618" actuatorfrcrange="-35 35" armature="0.00722"/>
+                  <geom class="visual" material="black" mesh="left_ankle_roll_link"/>
+                  <geom class="foot" pos="-0.05 0.025 -0.03"/>
+                  <geom class="foot" pos="-0.05 -0.025 -0.03"/>
+                  <geom class="foot" pos="0.12 0.03 -0.03"/>
+                  <geom class="foot" pos="0.12 -0.03 -0.03"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="right_hip_pitch_link" pos="0 -0.064452 -0.1027">
+        <inertial pos="0.002741 -0.047791 -0.02606" mass="1.35" fullinertia="0.001811 0.0014193 0.0012812 -3.68e-05 -3.44e-05 -0.000171"/>
+        <joint name="right_hip_pitch_joint" pos="0 0 0" axis="0 1 0" range="-2.5307 2.8798" actuatorfrcrange="-88 88" armature="0.01018"/>
+        <geom class="visual" material="black" mesh="right_hip_pitch_link"/>
+        <geom class="collision" mesh="right_hip_pitch_link"/>
+        <body name="right_hip_roll_link" pos="0 -0.052 -0.030465" quat="0.996179 0 -0.0873386 0">
+          <inertial pos="0.029812 0.001045 -0.087934" mass="1.52" fullinertia="0.0023773 0.0024123 0.0016595 3.8e-06 -0.0003908 -1.84e-05"/>
+          <joint name="right_hip_roll_joint" pos="0 0 0" axis="1 0 0" range="-2.9671 0.5236" actuatorfrcrange="-139 139" armature="0.02510"/>
+          <geom class="visual" mesh="right_hip_roll_link"/>
+          <geom class="collision" mesh="right_hip_roll_link"/>
+          <body name="right_hip_yaw_link" pos="0.025001 0 -0.12412">
+            <inertial pos="-0.057709 0.010981 -0.15078" mass="1.702" fullinertia="0.0057774 0.0076124 0.003149 0.0005411 -0.0023948 0.0007072"/>
+            <joint name="right_hip_yaw_joint" pos="0 0 0" axis="0 0 1" range="-2.7576 2.7576" actuatorfrcrange="-88 88" armature="0.01018"/>
+            <geom class="visual" mesh="right_hip_yaw_link"/>
+            <geom class="collision" mesh="right_hip_yaw_link"/>
+            <body name="right_knee_link" pos="-0.078273 -0.0021489 -0.17734" quat="0.996179 0 0.0873386 0">
+              <inertial pos="0.005457 -0.003964 -0.12074" mass="1.932" fullinertia="0.011329 0.011277 0.0015168 -4.82e-05 4.49e-05 0.0007146"/>
+              <joint name="right_knee_joint" pos="0 0 0" axis="0 1 0" range="-0.087267 2.8798" actuatorfrcrange="-139 139" armature="0.02510"/>
+              <geom class="visual" mesh="right_knee_link"/>
+              <geom class="collision" mesh="right_knee_link"/>
+              <body name="right_ankle_pitch_link" pos="0 9.4445e-05 -0.30001">
+                <inertial pos="-0.007269 0 0.011137" mass="0.074" fullinertia="8.4e-06 1.89e-05 1.26e-05 0 -2.9e-06 0"/>
+                <joint name="right_ankle_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.87267 0.5236" actuatorfrcrange="-35 35" armature="0.00722"/>
+                <geom class="visual" mesh="right_ankle_pitch_link"/>
+                <geom class="collision" mesh="right_ankle_pitch_link"/>
+                <body name="right_ankle_roll_link" pos="0 0 -0.017558">
+                  <inertial pos="0.026505 0 -0.016425" mass="0.608" fullinertia="0.0002231 0.0016161 0.0016667 -2e-07 8.91e-05 1e-07"/>
+                  <joint name="right_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.2618 0.2618" actuatorfrcrange="-35 35" armature="0.00722"/>
+                  <geom class="visual" material="black" mesh="right_ankle_roll_link"/>
+                  <geom class="foot" pos="-0.05 0.025 -0.03"/>
+                  <geom class="foot" pos="-0.05 -0.025 -0.03"/>
+                  <geom class="foot" pos="0.12 0.03 -0.03"/>
+                  <geom class="foot" pos="0.12 -0.03 -0.03"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="waist_yaw_link">
+        <inertial pos="0.003494 0.000233 0.018034" mass="0.214" fullinertia="0.00010673 0.00010422 0.0001625 2.703e-06 -7.631e-06 -2.01e-07"/>
+        <joint name="waist_yaw_joint" pos="0 0 0" axis="0 0 1" range="-2.618 2.618" actuatorfrcrange="-88 88" armature="0.01018"/>
+        <geom class="visual" mesh="waist_yaw_link"/>
+        <body name="waist_roll_link" pos="-0.0039635 0 0.044">
+          <inertial pos="0 2.3e-05 0" mass="0.086" fullinertia="7.079e-06 6.339e-06 8.245e-06 0 0 0"/>
+          <joint name="waist_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.52 0.52" actuatorfrcrange="-35 35" armature="0.00722"/>
+          <geom class="visual" mesh="waist_roll_link"/>
+          <body name="torso_link">
+            <inertial pos="0.000931 0.000346 0.15082" mass="6.78" fullinertia="0.05905 0.047014 0.025652 3.3302e-05 -0.0017715 -2.2399e-05"/>
+            <joint name="waist_pitch_joint" pos="0 0 0" axis="0 1 0" range="-0.52 0.52" actuatorfrcrange="-35 35" armature="0.00722"/>
+            <geom class="visual" mesh="torso_link"/>
+            <geom class="collision" mesh="torso_link"/>
+            <geom class="visual" material="black" pos="0.0039635 0 -0.044" mesh="logo_link"/>
+            <geom class="collision" pos="0.0039635 0 -0.044" mesh="logo_link"/>
+            <site name="imu_in_torso" size="0.01" pos="-0.03959 -0.00224 0.14792"/>
+            <body name="head_link" pos="0.0039635 0 -0.044">
+              <inertial pos="0.005267 0.000299 0.449869" mass="1.036" fullinertia="0.004085051 0.004185212 0.001807911 -2.543e-06 -6.9455e-05 -3.726e-06"/>
+              <geom class="visual" material="black" mesh="head_link"/>
+              <geom class="collision" mesh="head_link"/>
+            </body>
+            <body name="left_shoulder_pitch_link" pos="0.0039563 0.10022 0.24778" quat="0.990264 0.139201 1.38722e-05 -9.86868e-05">
+              <inertial pos="0 0.035892 -0.011628" mass="0.718" fullinertia="0.0004291 0.000453 0.000423 -9.2e-06 6.4e-06 2.26e-05"/>
+              <joint name="left_shoulder_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.0892 2.6704" actuatorfrcrange="-25 25" armature="0.00361"/>
+              <geom class="visual" mesh="left_shoulder_pitch_link"/>
+              <geom class="collision" type="cylinder" size="0.03 0.025" pos="0 0.04 -0.01" quat="0.707107 0 0.707107 0"/>
+              <body name="left_shoulder_roll_link" pos="0 0.038 -0.013831" quat="0.990268 -0.139172 0 0">
+                <inertial pos="-0.000227 0.00727 -0.063243" mass="0.643" fullinertia="0.0006177 0.0006912 0.0003894 -1e-06 8.7e-06 -5.3e-06"/>
+                <joint name="left_shoulder_roll_joint" pos="0 0 0" axis="1 0 0" range="-1.5882 2.2515" actuatorfrcrange="-25 25" armature="0.00361"/>
+                <geom class="visual" mesh="left_shoulder_roll_link"/>
+                <geom class="collision" type="cylinder" size="0.03 0.015" pos="-0.004 0.006 -0.053"/>
+                <body name="left_shoulder_yaw_link" pos="0 0.00624 -0.1032">
+                  <inertial pos="0.010773 -0.002949 -0.072009" mass="0.734" fullinertia="0.0009988 0.0010605 0.0004354 7.9e-06 0.0001412 -2.86e-05"/>
+                  <joint name="left_shoulder_yaw_joint" pos="0 0 0" axis="0 0 1" range="-2.618 2.618" actuatorfrcrange="-25 25" armature="0.00361"/>
+                  <geom class="visual" mesh="left_shoulder_yaw_link"/>
+                  <geom class="collision" mesh="left_shoulder_yaw_link"/>
+                  <body name="left_elbow_link" pos="0.015783 0 -0.080518">
+                    <inertial pos="0.064956 0.004454 -0.010062" mass="0.6" fullinertia="0.0002891 0.0004152 0.0004197 6.53e-05 1.72e-05 -5.6e-06"/>
+                    <joint name="left_elbow_joint" pos="0 0 0" axis="0 1 0" range="-1.0472 2.0944" actuatorfrcrange="-25 25" armature="0.00361"/>
+                    <geom class="visual" mesh="left_elbow_link"/>
+                    <geom class="collision" mesh="left_elbow_link"/>
+                    <body name="left_wrist_roll_link" pos="0.1 0.00188791 -0.01">
+                      <inertial pos="0.01713944778 0.00053759094 4.8864e-07" mass="0.08544498" fullinertia="4.821544023e-05 3.722899093e-05 5.482106541e-05 -4.24511021e-06 5.10599e-09 -1.23525e-09"/>
+                      <joint name="left_wrist_roll_joint" pos="0 0 0" axis="1 0 0" range="-1.972222054 1.972222054" actuatorfrcrange="-25 25" armature="0.00361"/>
+                      <geom class="visual" mesh="left_wrist_roll_link"/>
+                      <geom class="collision" mesh="left_wrist_roll_link"/>
+                      <body name="left_wrist_pitch_link" pos="0.038 0 0">
+                        <inertial pos="0.02299989837 -0.00111685314 -0.00111658096" mass="0.48404956" fullinertia="0.00016579646273 0.0004295405741 0.00042953697654 -1.231206746e-05 1.231699194e-05 8.1417712e-07"/>
+                        <joint name="left_wrist_pitch_joint" pos="0 0 0" axis="0 1 0" range="-1.614429558 1.614429558" actuatorfrcrange="-5 5" armature="0.00425"/>
+                        <geom class="visual" mesh="left_wrist_pitch_link"/>
+                        <geom class="collision" mesh="left_wrist_pitch_link"/>
+                        <body name="left_wrist_yaw_link" pos="0.046 0 0">
+                          <inertial pos="0.02200381568 0.00049485096 0.00053861123" mass="0.08457647" fullinertia="4.929128828e-05 5.973338134e-05 3.928083826e-05 -4.5735494e-07 4.45867591e-06 4.3217198e-07"/>
+                          <joint name="left_wrist_yaw_joint" pos="0 0 0" axis="0 0 1" range="-1.614429558 1.614429558" actuatorfrcrange="-5 5" armature="0.00425"/>
+                          <!-- Virtual IK target — the LimbIK End Effector points at this site
+                               instead of the wrist body, so reaching solves for "palm at the
+                               object" rather than "wrist joint at the object". Offset is in
+                               wrist_yaw_link local frame; tune until reach feels right. -->
+                          <site name="left_grasp_site" pos="0.20 0 -0.01" quat="0.707107 0 0.707107 0" size="0.015" rgba="0.2 1 0.4 0.6"/>
+                          <geom class="visual" mesh="left_wrist_yaw_link"/>
+                          <geom class="collision" mesh="left_wrist_yaw_link"/>
+                          <body name="L_hand_base_link" pos="0.0415 0 0" quat="0.707107 0 0 0.707107">
+                            <inertial pos="-0.002551 -0.066047 -0.0019357" mass="0.14143" fullinertia="0.0001234 8.3835e-05 7.7231e-05 2.1995e-06 -1.7694e-06 1.5968e-06"/>
+                            <geom class="visual" material="white" mesh="L_hand_base_link"/>
+                            <geom class="collision" mesh="L_hand_base_link"/>
+                            <body name="L_thumb_proximal_base" pos="-0.01696 -0.0691 0.02045" quat="0.5 0.5 -0.5 0.5">
+                              <inertial pos="0.0048817 0.00038782 -0.00722" mass="0.0018869" fullinertia="5.5158e-08 8.2164e-08 6.7434e-08 -1.1803e-08 -4.6743e-09 -1.3521e-09"/>
+                              <joint name="L_thumb_proximal_yaw_joint" pos="0 0 0" axis="0 0 1" range="-0.1 1.3" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="L_thumb_proximal_base"/>
+                              <geom class="finger_contact" mesh="L_thumb_proximal_base"/>
+                              <body name="L_thumb_proximal" pos="0.0099867 0.0098242 -0.0089" quat="0.704572 -0.704572 -0.059818 0.059818">
+                                <inertial pos="0.021936 -0.01279 -0.0080386" mass="0.0066101" fullinertia="1.5693e-06 1.7356e-06 2.787e-06 7.8339e-07 8.5959e-10 1.0378e-09"/>
+                                <joint name="L_thumb_proximal_pitch_joint" pos="0 0 0" axis="0 0 -1" range="-0.1 0.6" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="L_thumb_proximal"/>
+                                <geom class="finger_contact" mesh="L_thumb_proximal"/>
+                                <body name="L_thumb_intermediate" pos="0.04407 -0.034553 -0.0008">
+                                  <inertial pos="0.0095531 0.0016282 -0.0072002" mass="0.0037844" fullinertia="3.6981e-07 3.2395e-07 4.6532e-07 9.8603e-08 -2.8173e-12 -2.8028e-12"/>
+                                  <joint name="L_thumb_intermediate_joint" pos="0 0 0" axis="0 0 -1" range="0 0.8" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                  <geom class="visual" material="white" mesh="L_thumb_intermediate"/>
+                                  <geom class="finger_contact" mesh="L_thumb_intermediate"/>
+                                  <body name="L_thumb_distal" pos="0.020248 -0.010156 -0.0012">
+                                    <inertial pos="0.0092888 -0.004953 -0.0060033" mass="0.003344" fullinertia="1.3632e-07 1.4052e-07 2.0026e-07 5.6787e-08 -9.1939e-11 1.2145e-10"/>
+                                    <joint name="L_thumb_distal_joint" pos="0 0 0" axis="0 0 -1" range="0 1.2" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                    <geom class="visual" material="white" mesh="L_thumb_distal"/>
+                                    <geom class="finger_contact" mesh="L_thumb_distal"/>
+                                  </body>
+                                </body>
+                              </body>
+                            </body>
+                            <!-- DIAGNOSTIC TEST: removed body.quat=, baked the URDF rpy="-0.034907 0 0"
+                                 into the joint axis instead. Original quat was (0.999848,-0.017452,0,0)
+                                 = -0.034907 rad around X. Rotating axis (0,0,-1) by -0.034907 around X
+                                 gives (0, sin(-0.034907), -cos(-0.034907)) = (0, -0.034896, -0.999391).
+                                 If THIS finger now articulates and the others don't, the URDF→MJCF
+                                 rpy→quat conversion + hinge joint combo is the bug. -->
+                            <body name="L_index_proximal" pos="0.00028533 -0.13653 0.032268">
+                              <inertial pos="0.0012971 -0.011934 -0.0059998" mass="0.0042405" fullinertia="6.6215e-07 2.1167e-07 6.9402e-07 1.8442e-08 1.3746e-12 -1.4773e-11"/>
+                              <joint name="L_index_proximal_joint" pos="0 0 0" axis="0 -0.034896 -0.999391" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="L_index_proximal"/>
+                              <geom class="finger_contact" mesh="L_index_proximal"/>
+                              <body name="L_index_intermediate" pos="-0.0024229 -0.032041 -0.001">
+                                <inertial pos="0.0021753 -0.019567 -0.005" mass="0.0045682" fullinertia="7.6284e-07 9.4308e-08 7.8176e-07 -8.063e-08 3.6797e-13 1.5743e-13"/>
+                                <joint name="L_index_intermediate_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="L_index_intermediate"/>
+                                <geom class="finger_contact" mesh="L_index_intermediate"/>
+                              </body>
+                            </body>
+                            <body name="L_middle_proximal" pos="0.00028533 -0.1371 0.01295">
+                              <inertial pos="0.0012971 -0.011934 -0.0059999" mass="0.0042405" fullinertia="6.6215e-07 2.1167e-07 6.9402e-07 1.8442e-08 1.2299e-12 -1.4484e-11"/>
+                              <joint name="L_middle_proximal_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="L_middle_proximal"/>
+                              <geom class="finger_contact" mesh="L_middle_proximal"/>
+                              <body name="L_middle_intermediate" pos="-0.0024229 -0.032041 -0.001">
+                                <inertial pos="0.001921 -0.020796 -0.0049999" mass="0.0050397" fullinertia="9.5823e-07 1.0646e-07 9.8385e-07 -1.1425e-07 -2.4186e-12 3.6974e-12"/>
+                                <joint name="L_middle_intermediate_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="L_middle_intermediate"/>
+                                <geom class="finger_contact" mesh="L_middle_intermediate"/>
+                              </body>
+                            </body>
+                            <body name="L_ring_proximal" pos="0.00028533 -0.13691 -0.0062872" quat="0.999657 0.026177 0 0">
+                              <inertial pos="0.0012971 -0.011934 -0.0059999" mass="0.0042405" fullinertia="6.6215e-07 2.1167e-07 6.9402e-07 1.8442e-08 9.6052e-13 -1.4124e-11"/>
+                              <joint name="L_ring_proximal_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="L_ring_proximal"/>
+                              <geom class="finger_contact" mesh="L_ring_proximal"/>
+                              <body name="L_ring_intermediate" pos="-0.0024229 -0.032041 -0.001">
+                                <inertial pos="0.0021753 -0.019567 -0.005" mass="0.0045682" fullinertia="7.6285e-07 9.4308e-08 7.8176e-07 -8.0631e-08 3.3472e-14 -4.4773e-13"/>
+                                <joint name="L_ring_intermediate_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="L_ring_intermediate"/>
+                                <geom class="finger_contact" mesh="L_ring_intermediate"/>
+                              </body>
+                            </body>
+                            <body name="L_pinky_proximal" pos="0.00028533 -0.13571 -0.025488" quat="0.99863 0.052336 0 0">
+                              <inertial pos="0.0012971 -0.011934 -0.0059999" mass="0.0042405" fullinertia="6.6215e-07 2.1167e-07 6.9402e-07 1.8442e-08 1.0279e-12 -1.4277e-11"/>
+                              <joint name="L_pinky_proximal_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="L_pinky_proximal"/>
+                              <geom class="finger_contact" mesh="L_pinky_proximal"/>
+                              <body name="L_pinky_intermediate" pos="-0.0024229 -0.032041 -0.001">
+                                <inertial pos="0.0024788 -0.016208 -0.0050001" mass="0.0036036" fullinertia="4.3923e-07 7.0315e-08 4.4881e-07 -4.1355e-08 1.2263e-12 3.1311e-12"/>
+                                <joint name="L_pinky_intermediate_joint" pos="0 0 0" axis="0 0 -1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="L_pinky_intermediate"/>
+                                <geom class="finger_contact" mesh="L_pinky_intermediate"/>
+                              </body>
+                            </body>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+            <body name="right_shoulder_pitch_link" pos="0.0039563 -0.10021 0.24778" quat="0.990264 -0.139201 1.38722e-05 9.86868e-05">
+              <inertial pos="0 -0.035892 -0.011628" mass="0.718" fullinertia="0.0004291 0.000453 0.000423 9.2e-06 6.4e-06 -2.26e-05"/>
+              <joint name="right_shoulder_pitch_joint" pos="0 0 0" axis="0 1 0" range="-3.0892 2.6704" actuatorfrcrange="-25 25" armature="0.00361"/>
+              <geom class="visual" mesh="right_shoulder_pitch_link"/>
+              <geom class="collision" type="cylinder" size="0.03 0.025" pos="0 -0.04 -0.01" quat="0.707107 0 0.707107 0"/>
+              <body name="right_shoulder_roll_link" pos="0 -0.038 -0.013831" quat="0.990268 0.139172 0 0">
+                <inertial pos="-0.000227 -0.00727 -0.063243" mass="0.643" fullinertia="0.0006177 0.0006912 0.0003894 1e-06 8.7e-06 5.3e-06"/>
+                <joint name="right_shoulder_roll_joint" pos="0 0 0" axis="1 0 0" range="-2.2515 1.5882" actuatorfrcrange="-25 25" armature="0.00361"/>
+                <geom class="visual" mesh="right_shoulder_roll_link"/>
+                <geom class="collision" type="cylinder" size="0.03 0.015" pos="-0.004 -0.006 -0.053"/>
+                <body name="right_shoulder_yaw_link" pos="0 -0.00624 -0.1032">
+                  <inertial pos="0.010773 0.002949 -0.072009" mass="0.734" fullinertia="0.0009988 0.0010605 0.0004354 -7.9e-06 0.0001412 2.86e-05"/>
+                  <joint name="right_shoulder_yaw_joint" pos="0 0 0" axis="0 0 1" range="-2.618 2.618" actuatorfrcrange="-25 25" armature="0.00361"/>
+                  <geom class="visual" mesh="right_shoulder_yaw_link"/>
+                  <geom class="collision" mesh="right_shoulder_yaw_link"/>
+                  <body name="right_elbow_link" pos="0.015783 0 -0.080518">
+                    <inertial pos="0.064956 -0.004454 -0.010062" mass="0.6" fullinertia="0.0002891 0.0004152 0.0004197 -6.53e-05 1.72e-05 5.6e-06"/>
+                    <joint name="right_elbow_joint" pos="0 0 0" axis="0 1 0" range="-1.0472 2.0944" actuatorfrcrange="-25 25" armature="0.00361"/>
+                    <geom class="visual" mesh="right_elbow_link"/>
+                    <geom class="collision" mesh="right_elbow_link"/>
+                    <body name="right_wrist_roll_link" pos="0.1 -0.00188791 -0.01">
+                      <inertial pos="0.01713944778 -0.00053759094 4.8864e-07" mass="0.08544498" fullinertia="4.821544023e-05 3.722899093e-05 5.482106541e-05 4.24511021e-06 5.10599e-09 1.23525e-09"/>
+                      <joint name="right_wrist_roll_joint" pos="0 0 0" axis="1 0 0" range="-1.972222054 1.972222054" actuatorfrcrange="-25 25" armature="0.00361"/>
+                      <geom class="visual" mesh="right_wrist_roll_link"/>
+                      <geom class="collision" mesh="right_wrist_roll_link"/>
+                      <body name="right_wrist_pitch_link" pos="0.038 0 0">
+                        <inertial pos="0.02299989837 0.00111685314 -0.00111658096" mass="0.48404956" fullinertia="0.00016579646273 0.0004295405741 0.00042953697654 1.231206746e-05 1.231699194e-05 -8.1417712e-07"/>
+                        <joint name="right_wrist_pitch_joint" pos="0 0 0" axis="0 1 0" range="-1.614429558 1.614429558" actuatorfrcrange="-5 5" armature="0.00425"/>
+                        <geom class="visual" mesh="right_wrist_pitch_link"/>
+                        <geom class="collision" mesh="right_wrist_pitch_link"/>
+                        <body name="right_wrist_yaw_link" pos="0.046 0 0">
+                          <inertial pos="0.02200381568 -0.00049485096 0.00053861123" mass="0.08457647" fullinertia="4.929128828e-05 5.973338134e-05 3.928083826e-05 4.5735494e-07 4.45867591e-06 -4.3217198e-07"/>
+                          <joint name="right_wrist_yaw_joint" pos="0 0 0" axis="0 0 1" range="-1.614429558 1.614429558" actuatorfrcrange="-5 5" armature="0.00425"/>
+                          <site name="right_grasp_site" pos="0.20 0 0.01" quat="0.707107 0 0.707107 0" size="0.015" rgba="1 0.55 0.25 0.6"/>
+                          <geom class="visual" mesh="right_wrist_yaw_link"/>
+                          <geom class="collision" mesh="right_wrist_yaw_link"/>
+                          <body name="R_hand_base_link" pos="0.0415 0 0" quat="0 0.707107 -0.707107 0">
+                            <inertial pos="-0.0025264 -0.066047 0.0019598" mass="0.14143" fullinertia="0.00012281 8.3832e-05 7.6663e-05 2.1711e-06 1.7709e-06 -1.6551e-06"/>
+                            <geom class="visual" material="white" mesh="R_hand_base_link"/>
+                            <geom class="collision" mesh="R_hand_base_link"/>
+                            <body name="R_thumb_proximal_base" pos="-0.01696 -0.0691 -0.02045" quat="0.5 0.5 -0.5 0.5">
+                              <inertial pos="-0.0048064 0.0009382 -0.00757" mass="0.0018869" fullinertia="5.816e-08 7.9161e-08 6.7433e-08 1.4539e-08 4.491e-09 -1.8727e-09"/>
+                              <joint name="R_thumb_proximal_yaw_joint" pos="0 0 0" axis="0 0 -1" range="-0.1 1.3" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="R_thumb_proximal_base"/>
+                              <geom class="finger_contact" mesh="R_thumb_proximal_base"/>
+                              <body name="R_thumb_proximal" pos="-0.0088099 0.010892 -0.00925" quat="0.099593 0.099593 0.700048 0.700048">
+                                <inertial pos="0.021932 0.012785 -0.0080386" mass="0.0066075" fullinertia="1.5686e-06 1.7353e-06 2.786e-06 -7.8296e-07 8.9143e-10 -1.0191e-09"/>
+                                <joint name="R_thumb_proximal_pitch_joint" pos="0 0 0" axis="0 0 1" range="-0.1 0.6" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="R_thumb_proximal"/>
+                                <geom class="finger_contact" mesh="R_thumb_proximal"/>
+                                <body name="R_thumb_intermediate" pos="0.04407 0.034553 -0.0008">
+                                  <inertial pos="0.0095544 -0.0016282 -0.0071997" mass="0.0037847" fullinertia="3.6981e-07 3.2394e-07 4.6531e-07 -9.8581e-08 -4.7469e-12 1.0939e-12"/>
+                                  <joint name="R_thumb_intermediate_joint" pos="0 0 0" axis="0 0 1" range="0 0.8" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                  <geom class="visual" material="white" mesh="R_thumb_intermediate"/>
+                                  <geom class="finger_contact" mesh="R_thumb_intermediate"/>
+                                  <body name="R_thumb_distal" pos="0.020248 0.010156 -0.0012">
+                                    <inertial pos="0.0092888 0.0049529 -0.0060033" mass="0.0033441" fullinertia="1.3632e-07 1.4052e-07 2.0026e-07 -5.6788e-08 -9.2764e-11 -1.2283e-10"/>
+                                    <joint name="R_thumb_distal_joint" pos="0 0 0" axis="0 0 1" range="0 1.2" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                    <geom class="visual" material="white" mesh="R_thumb_distal"/>
+                                    <geom class="finger_contact" mesh="R_thumb_distal"/>
+                                  </body>
+                                </body>
+                              </body>
+                            </body>
+                            <body name="R_index_proximal" pos="0.00028533 -0.13653 -0.032268" quat="0.017452 -0.999848 0 0">
+                              <inertial pos="0.0012259 0.011942 -0.0060001" mass="0.0042403" fullinertia="6.6232e-07 2.1146e-07 6.9398e-07 -1.5775e-08 1.8515e-12 -5.0828e-12"/>
+                              <joint name="R_index_proximal_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="R_index_proximal"/>
+                              <geom class="finger_contact" mesh="R_index_proximal"/>
+                              <body name="R_index_intermediate" pos="-0.0026138 0.032026 -0.001">
+                                <inertial pos="0.0019697 0.019589 -0.005" mass="0.0045683" fullinertia="7.6111e-07 9.6076e-08 7.8179e-07 8.7637e-08 -3.7751e-13 9.9444e-13"/>
+                                <joint name="R_index_intermediate_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="R_index_intermediate"/>
+                                <geom class="finger_contact" mesh="R_index_intermediate"/>
+                              </body>
+                            </body>
+                            <body name="R_middle_proximal" pos="0.00028533 -0.1371 -0.01295" quat="0 1 0 0">
+                              <inertial pos="0.001297 0.011934 -0.0060001" mass="0.0042403" fullinertia="6.6211e-07 2.1167e-07 6.9397e-07 -1.8461e-08 1.8002e-12 -6.6808e-12"/>
+                              <joint name="R_middle_proximal_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="R_middle_proximal"/>
+                              <geom class="finger_contact" mesh="R_middle_proximal"/>
+                              <body name="R_middle_intermediate" pos="-0.0024229 0.032041 -0.001">
+                                <inertial pos="0.001921 0.020796 -0.005" mass="0.0050396" fullinertia="9.5822e-07 1.0646e-07 9.8384e-07 1.1425e-07 -2.4791e-12 5.9173e-12"/>
+                                <joint name="R_middle_intermediate_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="R_middle_intermediate"/>
+                                <geom class="finger_contact" mesh="R_middle_intermediate"/>
+                              </body>
+                            </body>
+                            <body name="R_ring_proximal" pos="0.00028533 -0.13691 0.0062872" quat="0.026168 0.999657 0 0">
+                              <inertial pos="0.001297 0.011934 -0.0060002" mass="0.0042403" fullinertia="6.6211e-07 2.1167e-07 6.9397e-07 -1.8461e-08 1.5793e-12 -6.6868e-12"/>
+                              <joint name="R_ring_proximal_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="R_ring_proximal"/>
+                              <geom class="finger_contact" mesh="R_ring_proximal"/>
+                              <body name="R_ring_intermediate" pos="-0.0024229 0.032041 -0.001">
+                                <inertial pos="0.0021753 0.019567 -0.005" mass="0.0045683" fullinertia="7.6286e-07 9.431e-08 7.8177e-07 8.0635e-08 -6.1562e-13 5.8619e-13"/>
+                                <joint name="R_ring_intermediate_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="R_ring_intermediate"/>
+                                <geom class="finger_contact" mesh="R_ring_intermediate"/>
+                              </body>
+                            </body>
+                            <body name="R_pinky_proximal" pos="0.00028533 -0.13571 0.025488" quat="0.052331 0.99863 0 0">
+                              <inertial pos="0.001297 0.011934 -0.0060001" mass="0.0042403" fullinertia="6.6211e-07 2.1167e-07 6.9397e-07 -1.8461e-08 1.6907e-12 -6.9334e-12"/>
+                              <joint name="R_pinky_proximal_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                              <geom class="visual" material="white" mesh="R_pinky_proximal"/>
+                              <geom class="finger_contact" mesh="R_pinky_proximal"/>
+                              <body name="R_pinky_intermediate" pos="-0.0024229 0.032041 -0.001">
+                                <inertial pos="0.0024748 0.016203 -0.0050031" mass="0.0035996" fullinertia="4.3913e-07 7.0247e-08 4.4867e-07 4.1418e-08 3.7168e-11 5.8613e-11"/>
+                                <joint name="R_pinky_intermediate_joint" pos="0 0 0" axis="0 0 1" range="0 1.7" actuatorfrcrange="-1 1" armature="0.0001"/>
+                                <geom class="visual" material="white" mesh="R_pinky_intermediate"/>
+                                <geom class="finger_contact" mesh="R_pinky_intermediate"/>
+                              </body>
+                            </body>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <equality>
+    <joint joint1="L_thumb_intermediate_joint" joint2="L_thumb_proximal_pitch_joint" polycoef="0 1.6 0 0 0"/>
+    <joint joint1="L_thumb_distal_joint" joint2="L_thumb_proximal_pitch_joint" polycoef="0 2.4 0 0 0"/>
+    <joint joint1="L_index_intermediate_joint" joint2="L_index_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="L_middle_intermediate_joint" joint2="L_middle_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="L_ring_intermediate_joint" joint2="L_ring_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="L_pinky_intermediate_joint" joint2="L_pinky_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="R_thumb_intermediate_joint" joint2="R_thumb_proximal_pitch_joint" polycoef="0 1.6 0 0 0"/>
+    <joint joint1="R_thumb_distal_joint" joint2="R_thumb_proximal_pitch_joint" polycoef="0 2.4 0 0 0"/>
+    <joint joint1="R_index_intermediate_joint" joint2="R_index_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="R_middle_intermediate_joint" joint2="R_middle_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="R_ring_intermediate_joint" joint2="R_ring_proximal_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="R_pinky_intermediate_joint" joint2="R_pinky_proximal_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+
+  <!-- Comprehensive intra-hand collision excludes. The diagnostic log showed
+       the equality constraint between proximal and intermediate joints was
+       being violated (intermediate ahead of proximal), with the actuator
+       saturated at its 1 N·m limit. That's the intermediates hitting the
+       palm/hand_base mesh as they curl, pinning them and leaving the proximal
+       under-driven. We exclude every intra-hand pair that isn't an immediate
+       parent-child (those are auto-excluded by MuJoCo) so the fingers can
+       freely close into a fist. -->
+  <contact>
+    <!-- Hand base vs every finger body it could ever touch as fingers curl. -->
+    <exclude body1="L_hand_base_link" body2="L_thumb_proximal_base"/>
+    <exclude body1="L_hand_base_link" body2="L_thumb_proximal"/>
+    <exclude body1="L_hand_base_link" body2="L_thumb_intermediate"/>
+    <exclude body1="L_hand_base_link" body2="L_thumb_distal"/>
+    <exclude body1="L_hand_base_link" body2="L_index_proximal"/>
+    <exclude body1="L_hand_base_link" body2="L_index_intermediate"/>
+    <exclude body1="L_hand_base_link" body2="L_middle_proximal"/>
+    <exclude body1="L_hand_base_link" body2="L_middle_intermediate"/>
+    <exclude body1="L_hand_base_link" body2="L_ring_proximal"/>
+    <exclude body1="L_hand_base_link" body2="L_ring_intermediate"/>
+    <exclude body1="L_hand_base_link" body2="L_pinky_proximal"/>
+    <exclude body1="L_hand_base_link" body2="L_pinky_intermediate"/>
+    <!-- Adjacent fingers — proximals and intermediates can both crash into each other. -->
+    <exclude body1="L_index_proximal" body2="L_middle_proximal"/>
+    <exclude body1="L_middle_proximal" body2="L_ring_proximal"/>
+    <exclude body1="L_ring_proximal" body2="L_pinky_proximal"/>
+    <exclude body1="L_index_intermediate" body2="L_middle_intermediate"/>
+    <exclude body1="L_middle_intermediate" body2="L_ring_intermediate"/>
+    <exclude body1="L_ring_intermediate" body2="L_pinky_intermediate"/>
+    <!-- Thumb crossing fingers when curled. -->
+    <exclude body1="L_thumb_proximal" body2="L_index_proximal"/>
+    <exclude body1="L_thumb_intermediate" body2="L_index_proximal"/>
+    <exclude body1="L_thumb_intermediate" body2="L_index_intermediate"/>
+    <exclude body1="L_thumb_distal" body2="L_index_proximal"/>
+    <exclude body1="L_thumb_distal" body2="L_index_intermediate"/>
+    <exclude body1="L_thumb_distal" body2="L_middle_intermediate"/>
+
+    <exclude body1="R_hand_base_link" body2="R_thumb_proximal_base"/>
+    <exclude body1="R_hand_base_link" body2="R_thumb_proximal"/>
+    <exclude body1="R_hand_base_link" body2="R_thumb_intermediate"/>
+    <exclude body1="R_hand_base_link" body2="R_thumb_distal"/>
+    <exclude body1="R_hand_base_link" body2="R_index_proximal"/>
+    <exclude body1="R_hand_base_link" body2="R_index_intermediate"/>
+    <exclude body1="R_hand_base_link" body2="R_middle_proximal"/>
+    <exclude body1="R_hand_base_link" body2="R_middle_intermediate"/>
+    <exclude body1="R_hand_base_link" body2="R_ring_proximal"/>
+    <exclude body1="R_hand_base_link" body2="R_ring_intermediate"/>
+    <exclude body1="R_hand_base_link" body2="R_pinky_proximal"/>
+    <exclude body1="R_hand_base_link" body2="R_pinky_intermediate"/>
+    <exclude body1="R_index_proximal" body2="R_middle_proximal"/>
+    <exclude body1="R_middle_proximal" body2="R_ring_proximal"/>
+    <exclude body1="R_ring_proximal" body2="R_pinky_proximal"/>
+    <exclude body1="R_index_intermediate" body2="R_middle_intermediate"/>
+    <exclude body1="R_middle_intermediate" body2="R_ring_intermediate"/>
+    <exclude body1="R_ring_intermediate" body2="R_pinky_intermediate"/>
+    <exclude body1="R_thumb_proximal" body2="R_index_proximal"/>
+    <exclude body1="R_thumb_intermediate" body2="R_index_proximal"/>
+    <exclude body1="R_thumb_intermediate" body2="R_index_intermediate"/>
+    <exclude body1="R_thumb_distal" body2="R_index_proximal"/>
+    <exclude body1="R_thumb_distal" body2="R_index_intermediate"/>
+    <exclude body1="R_thumb_distal" body2="R_middle_intermediate"/>
+
+    <!-- Wrist bodies vs every finger body. The wrist mesh extends forward into
+         the palm/finger region, and is not a parent-child of the finger bodies
+         (only of L_hand_base_link), so MuJoCo doesn't auto-exclude. Any contact
+         here pins the finger via constraint force and our actuator can't push
+         past it. Do all four wrist bodies × all finger bodies, both hands. -->
+    <exclude body1="left_wrist_yaw_link"   body2="L_thumb_proximal_base"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_thumb_proximal"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_thumb_intermediate"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_thumb_distal"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_index_proximal"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_index_intermediate"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_middle_proximal"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_middle_intermediate"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_ring_proximal"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_ring_intermediate"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_pinky_proximal"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_pinky_intermediate"/>
+    <exclude body1="left_wrist_yaw_link"   body2="L_hand_base_link"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_thumb_proximal_base"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_thumb_proximal"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_thumb_intermediate"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_thumb_distal"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_index_proximal"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_index_intermediate"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_middle_proximal"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_middle_intermediate"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_ring_proximal"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_ring_intermediate"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_pinky_proximal"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_pinky_intermediate"/>
+    <exclude body1="left_wrist_pitch_link" body2="L_hand_base_link"/>
+    <exclude body1="left_wrist_roll_link"  body2="L_index_proximal"/>
+    <exclude body1="left_wrist_roll_link"  body2="L_middle_proximal"/>
+    <exclude body1="left_wrist_roll_link"  body2="L_ring_proximal"/>
+    <exclude body1="left_wrist_roll_link"  body2="L_pinky_proximal"/>
+    <exclude body1="left_wrist_roll_link"  body2="L_thumb_proximal"/>
+    <exclude body1="left_wrist_roll_link"  body2="L_hand_base_link"/>
+
+    <exclude body1="right_wrist_yaw_link"   body2="R_thumb_proximal_base"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_thumb_proximal"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_thumb_intermediate"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_thumb_distal"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_index_proximal"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_index_intermediate"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_middle_proximal"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_middle_intermediate"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_ring_proximal"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_ring_intermediate"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_pinky_proximal"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_pinky_intermediate"/>
+    <exclude body1="right_wrist_yaw_link"   body2="R_hand_base_link"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_thumb_proximal_base"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_thumb_proximal"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_thumb_intermediate"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_thumb_distal"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_index_proximal"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_index_intermediate"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_middle_proximal"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_middle_intermediate"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_ring_proximal"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_ring_intermediate"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_pinky_proximal"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_pinky_intermediate"/>
+    <exclude body1="right_wrist_pitch_link" body2="R_hand_base_link"/>
+    <exclude body1="right_wrist_roll_link"  body2="R_index_proximal"/>
+    <exclude body1="right_wrist_roll_link"  body2="R_middle_proximal"/>
+    <exclude body1="right_wrist_roll_link"  body2="R_ring_proximal"/>
+    <exclude body1="right_wrist_roll_link"  body2="R_pinky_proximal"/>
+    <exclude body1="right_wrist_roll_link"  body2="R_thumb_proximal"/>
+    <exclude body1="right_wrist_roll_link"  body2="R_hand_base_link"/>
+  </contact>
+
+  <!-- Position actuators with explicit PD gains, matching the working g1.xml.
+       kp/kv values for the 29 body joints come from policy_descriptor.walker.json
+       (the same gains the policy was trained against). Finger gains are low
+       (kp=3, kv=0.3) — enough to hold them against gravity but not enough to
+       fight a grip. inheritrange="1" means the actuator's ctrlrange is taken
+       from each joint's range automatically.
+
+       NOTE: These were `<motor>` actuators in the URDF→MJCF conversion, which
+       is the wrong shape for IK-driven control: motor's ctrl is interpreted
+       as raw torque (qfrc = ctrl), so any IK target qpos comes through as a
+       constant torque that accelerates the joint indefinitely. <position>
+       with affine bias gives qfrc = kp*(target - qpos) - kv*qvel, the correct
+       PD law that smoothly tracks IK targets. -->
+  <actuator>
+    <position name="left_hip_pitch_joint"          joint="left_hip_pitch_joint"          inheritrange="1" kp="40.179" kv="2.558"/>
+    <position name="left_hip_roll_joint"           joint="left_hip_roll_joint"           inheritrange="1" kp="99.098" kv="6.309"/>
+    <position name="left_hip_yaw_joint"            joint="left_hip_yaw_joint"            inheritrange="1" kp="40.179" kv="2.558"/>
+    <position name="left_knee_joint"               joint="left_knee_joint"               inheritrange="1" kp="99.098" kv="6.309"/>
+    <position name="left_ankle_pitch_joint"        joint="left_ankle_pitch_joint"        inheritrange="1" kp="28.501" kv="1.814"/>
+    <position name="left_ankle_roll_joint"         joint="left_ankle_roll_joint"         inheritrange="1" kp="28.501" kv="1.814"/>
+    <position name="right_hip_pitch_joint"         joint="right_hip_pitch_joint"         inheritrange="1" kp="40.179" kv="2.558"/>
+    <position name="right_hip_roll_joint"          joint="right_hip_roll_joint"          inheritrange="1" kp="99.098" kv="6.309"/>
+    <position name="right_hip_yaw_joint"           joint="right_hip_yaw_joint"           inheritrange="1" kp="40.179" kv="2.558"/>
+    <position name="right_knee_joint"              joint="right_knee_joint"              inheritrange="1" kp="99.098" kv="6.309"/>
+    <position name="right_ankle_pitch_joint"       joint="right_ankle_pitch_joint"       inheritrange="1" kp="28.501" kv="1.814"/>
+    <position name="right_ankle_roll_joint"        joint="right_ankle_roll_joint"        inheritrange="1" kp="28.501" kv="1.814"/>
+    <position name="waist_yaw_joint"               joint="waist_yaw_joint"               inheritrange="1" kp="40.179" kv="2.558"/>
+    <position name="waist_roll_joint"              joint="waist_roll_joint"              inheritrange="1" kp="28.501" kv="1.814"/>
+    <position name="waist_pitch_joint"             joint="waist_pitch_joint"             inheritrange="1" kp="28.501" kv="1.814"/>
+    <position name="left_shoulder_pitch_joint"     joint="left_shoulder_pitch_joint"     inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="left_shoulder_roll_joint"      joint="left_shoulder_roll_joint"      inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="left_shoulder_yaw_joint"       joint="left_shoulder_yaw_joint"       inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="left_elbow_joint"              joint="left_elbow_joint"              inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="left_wrist_roll_joint"         joint="left_wrist_roll_joint"         inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="left_wrist_pitch_joint"        joint="left_wrist_pitch_joint"        inheritrange="1" kp="16.778" kv="1.068"/>
+    <position name="left_wrist_yaw_joint"          joint="left_wrist_yaw_joint"          inheritrange="1" kp="16.778" kv="1.068"/>
+    <position name="L_thumb_proximal_yaw_joint"    joint="L_thumb_proximal_yaw_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_thumb_proximal_pitch_joint"  joint="L_thumb_proximal_pitch_joint"  inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_thumb_intermediate_joint"    joint="L_thumb_intermediate_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_thumb_distal_joint"          joint="L_thumb_distal_joint"          inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_index_proximal_joint"        joint="L_index_proximal_joint"        inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_index_intermediate_joint"    joint="L_index_intermediate_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_middle_proximal_joint"       joint="L_middle_proximal_joint"       inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_middle_intermediate_joint"   joint="L_middle_intermediate_joint"   inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_ring_proximal_joint"         joint="L_ring_proximal_joint"         inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_ring_intermediate_joint"     joint="L_ring_intermediate_joint"     inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_pinky_proximal_joint"        joint="L_pinky_proximal_joint"        inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="L_pinky_intermediate_joint"    joint="L_pinky_intermediate_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="right_shoulder_pitch_joint"    joint="right_shoulder_pitch_joint"    inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="right_shoulder_roll_joint"     joint="right_shoulder_roll_joint"     inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="right_shoulder_yaw_joint"      joint="right_shoulder_yaw_joint"      inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="right_elbow_joint"             joint="right_elbow_joint"             inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="right_wrist_roll_joint"        joint="right_wrist_roll_joint"        inheritrange="1" kp="14.251" kv="0.907"/>
+    <position name="right_wrist_pitch_joint"       joint="right_wrist_pitch_joint"       inheritrange="1" kp="16.778" kv="1.068"/>
+    <position name="right_wrist_yaw_joint"         joint="right_wrist_yaw_joint"         inheritrange="1" kp="16.778" kv="1.068"/>
+    <position name="R_thumb_proximal_yaw_joint"    joint="R_thumb_proximal_yaw_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_thumb_proximal_pitch_joint"  joint="R_thumb_proximal_pitch_joint"  inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_thumb_intermediate_joint"    joint="R_thumb_intermediate_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_thumb_distal_joint"          joint="R_thumb_distal_joint"          inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_index_proximal_joint"        joint="R_index_proximal_joint"        inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_index_intermediate_joint"    joint="R_index_intermediate_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_middle_proximal_joint"       joint="R_middle_proximal_joint"       inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_middle_intermediate_joint"   joint="R_middle_intermediate_joint"   inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_ring_proximal_joint"         joint="R_ring_proximal_joint"         inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_ring_intermediate_joint"     joint="R_ring_intermediate_joint"     inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_pinky_proximal_joint"        joint="R_pinky_proximal_joint"        inheritrange="1" kp="3.0"    kv="0.3"/>
+    <position name="R_pinky_intermediate_joint"    joint="R_pinky_intermediate_joint"    inheritrange="1" kp="3.0"    kv="0.3"/>
+  </actuator>
+
+  <sensor>
+    <gyro name="imu-torso-angular-velocity" site="imu_in_torso" noise="5e-4" cutoff="34.9"/>
+    <accelerometer name="imu-torso-linear-acceleration" site="imu_in_torso" noise="1e-2" cutoff="157"/>
+    <gyro name="imu-pelvis-angular-velocity" site="imu_in_pelvis" noise="5e-4" cutoff="34.9"/>
+    <accelerometer name="imu-pelvis-linear-acceleration" site="imu_in_pelvis" noise="1e-2" cutoff="157"/>
+  </sensor>
+</mujoco>

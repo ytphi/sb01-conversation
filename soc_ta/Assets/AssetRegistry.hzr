@@ -1,0 +1,289 @@
+Assets:
+  - Handle: 35957002469575234
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_wrist_yaw_link.STL
+    Type: MeshSource
+  - Handle: 200511112069186124
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_elbow_link.STL
+    Type: MeshSource
+  - Handle: 227543771449663730
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link19_L.STL
+    Type: MeshSource
+  - Handle: 513893059898915415
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_hip_yaw_link.STL
+    Type: MeshSource
+  - Handle: 516847757898245399
+    FilePath: Scripts/Intermediates/Debug/.NETCoreApp,Version=v9.0.AssemblyAttributes.cs
+    Type: ScriptFile
+  - Handle: 563115041093418502
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link19_R.STL
+    Type: MeshSource
+  - Handle: 925457069591143587
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/torso_link_rev_1_0.STL
+    Type: MeshSource
+  - Handle: 1309990384607528550
+    FilePath: Scripts/Binaries/SocTa.runtimeconfig.json
+    Type: Motion
+  - Handle: 2132457029956995521
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link18_R.STL
+    Type: MeshSource
+  - Handle: 2359742690499842061
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/waist_roll_link_rev_1_0.STL
+    Type: MeshSource
+  - Handle: 2401926853658725276
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link11_L.STL
+    Type: MeshSource
+  - Handle: 2429332915638368959
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_wrist_pitch_link.STL
+    Type: MeshSource
+  - Handle: 3164442158580705349
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/logo_link.STL
+    Type: MeshSource
+  - Handle: 3336841238185171888
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link15_L.STL
+    Type: MeshSource
+  - Handle: 3431862279411493118
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_wrist_roll_link.STL
+    Type: MeshSource
+  - Handle: 3659638459075095557
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_hip_pitch_link.STL
+    Type: MeshSource
+  - Handle: 3691850971384160715
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_hip_roll_link.STL
+    Type: MeshSource
+  - Handle: 4241663774595030205
+    FilePath: Meshes/Default/Cube.hsmesh
+    Type: StaticMesh
+  - Handle: 4294643768192036576
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link22_R.STL
+    Type: MeshSource
+  - Handle: 4550222422009441005
+    FilePath: Meshes/Default/Source/Cube.gltf
+    Type: MeshSource
+  - Handle: 4567949160144387418
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link18_L.STL
+    Type: MeshSource
+  - Handle: 4656579814940362890
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/pelvis.STL
+    Type: MeshSource
+  - Handle: 4855530991727028296
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_knee_link.STL
+    Type: MeshSource
+  - Handle: 4971945983577250534
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link17_L.STL
+    Type: MeshSource
+  - Handle: 5072823794810536954
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/rotator.honnx
+    Type: OnnxPolicy
+  - Handle: 5152425958736803438
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/g1_five_fingers.xml
+    Type: MujocoScene
+  - Handle: 5696029208456550707
+    FilePath: Meshes/SOC_Revised.hmesh
+    Type: Mesh
+  - Handle: 5712451343787241409
+    FilePath: Materials/Default/GroundMaterial.hmaterial
+    Type: Material
+  - Handle: 5715711999062278795
+    FilePath: Scripts/Source/Generated/WalkerCommands.cs
+    Type: ScriptFile
+  - Handle: 6194380418895311807
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link15_R.STL
+    Type: MeshSource
+  - Handle: 6251100257060305657
+    FilePath: Scripts/Binaries/SocTa.deps.json
+    Type: Motion
+  - Handle: 6542276526105487413
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/walker.onnx
+    Type: OnnxModel
+  - Handle: 6835626223883414684
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link21_R.STL
+    Type: MeshSource
+  - Handle: 7262319700194799879
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/rotator_Policy.cs
+    Type: ScriptFile
+  - Handle: 7490042376963252271
+    FilePath: Meshes/Default/Source/Cylinder.gltf
+    Type: MeshSource
+  - Handle: 7639208427221694477
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_shoulder_yaw_link.STL
+    Type: MeshSource
+  - Handle: 7780836176916650179
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/model_config.json
+    Type: Motion
+  - Handle: 7808612018765596001
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_shoulder_roll_link.STL
+    Type: MeshSource
+  - Handle: 8081499440683993017
+    FilePath: Meshes/Default/Source/Cone.gltf
+    Type: MeshSource
+  - Handle: 8416906354284095165
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_wrist_yaw_link.STL
+    Type: MeshSource
+  - Handle: 8513003883273364851
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/walker.honnx
+    Type: OnnxPolicy
+  - Handle: 8739588051432950131
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_hip_yaw_link.STL
+    Type: MeshSource
+  - Handle: 8745222432281466765
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_elbow_link.STL
+    Type: MeshSource
+  - Handle: 8746944367520663901
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/pelvis_contour_link.STL
+    Type: MeshSource
+  - Handle: 9051292432182716454
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link17_R.STL
+    Type: MeshSource
+  - Handle: 9208300598631077648
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/L_hand_base_link.STL
+    Type: MeshSource
+  - Handle: 9515279380957170208
+    FilePath: EnvMap/suburban_soccer_park_2k.hdr
+    Type: EnvMap
+  - Handle: 9753896275452283354
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/policy_descriptor.rotator.json
+    Type: Motion
+  - Handle: 9952382462260396011
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_ankle_roll_link.STL
+    Type: MeshSource
+  - Handle: 9960609783167456810
+    FilePath: Scenes/Main.hscene
+    Type: Scene
+  - Handle: 10299169103136257335
+    FilePath: Meshes/Default/Source/Octahedron.glb
+    Type: MeshSource
+  - Handle: 10354979605907140242
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_hip_pitch_link.STL
+    Type: MeshSource
+  - Handle: 10407689879994103875
+    FilePath: Scripts/Client/obj/project.assets.json
+    Type: Motion
+  - Handle: 10555242020448645418
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link13_R.STL
+    Type: MeshSource
+  - Handle: 10821214063526428921
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link20_R.STL
+    Type: MeshSource
+  - Handle: 11258077692841752975
+    FilePath: Meshes/Default/Plane.hsmesh
+    Type: StaticMesh
+  - Handle: 11405931448821090536
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link11_R.STL
+    Type: MeshSource
+  - Handle: 11445831163164732036
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link14_L.STL
+    Type: MeshSource
+  - Handle: 11567119054079208669
+    FilePath: Scripts/Source/Generated/RotatorCommands.cs
+    Type: ScriptFile
+  - Handle: 12015144966276911039
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/waist_yaw_link_rev_1_0.STL
+    Type: MeshSource
+  - Handle: 12052542844666257188
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link21_L.STL
+    Type: MeshSource
+  - Handle: 12224950976375940262
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link14_R.STL
+    Type: MeshSource
+  - Handle: 12255867915775480992
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link13_L.STL
+    Type: MeshSource
+  - Handle: 12279431880342617144
+    FilePath: Scripts/Intermediates/Debug/SocTa.AssemblyInfo.cs
+    Type: ScriptFile
+  - Handle: 12379336244138579658
+    FilePath: Meshes/CGI-112/SOC_Revised.glb
+    Type: MeshSource
+  - Handle: 12521286175998960537
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link12_R.STL
+    Type: MeshSource
+  - Handle: 12899366477434862255
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/policy_descriptor.walker.json
+    Type: Motion
+  - Handle: 12942316390362316114
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_shoulder_pitch_link.STL
+    Type: MeshSource
+  - Handle: 12996902585583548863
+    FilePath: EnvMap/CGI112_Room.glb
+    Type: MeshSource
+  - Handle: 13500760680221994221
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/walker_Policy.cs
+    Type: ScriptFile
+  - Handle: 13626552752265918836
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_ankle_pitch_link.STL
+    Type: MeshSource
+  - Handle: 13675471793974178172
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_wrist_roll_link.STL
+    Type: MeshSource
+  - Handle: 13753507191695318689
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link16_R.STL
+    Type: MeshSource
+  - Handle: 14003656530787136747
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link20_L.STL
+    Type: MeshSource
+  - Handle: 14008776275657692050
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link16_L.STL
+    Type: MeshSource
+  - Handle: 14022440043190521038
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link22_L.STL
+    Type: MeshSource
+  - Handle: 14056081328283658033
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/right_ankle_roll_link.STL
+    Type: MeshSource
+  - Handle: 14756653071851265811
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/head_link.STL
+    Type: MeshSource
+  - Handle: 15319317452473964458
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_hip_roll_link.STL
+    Type: MeshSource
+  - Handle: 15470140730659209254
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/MG_UnitreeG1FiveFingers.hmograph
+    Type: MotionGraph
+  - Handle: 15933791052926114540
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_shoulder_pitch_link.STL
+    Type: MeshSource
+  - Handle: 15989316657234040474
+    FilePath: Meshes/Default/Source/Plane.gltf
+    Type: MeshSource
+  - Handle: 16140680846484790557
+    FilePath: Scripts/Source/Generated/MainPolicyIds.cs
+    Type: ScriptFile
+  - Handle: 16197964264868058627
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/Link12_L.STL
+    Type: MeshSource
+  - Handle: 16611178280440020872
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/g1_five_fingers.png
+    Type: Texture
+  - Handle: 16698136933972239235
+    FilePath: Meshes/Default/Source/Torus.gltf
+    Type: MeshSource
+  - Handle: 16721476681224016421
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_shoulder_roll_link.STL
+    Type: MeshSource
+  - Handle: 16743873880316141212
+    FilePath: Scripts/Client/obj/SocTa.csproj.nuget.dgspec.json
+    Type: Motion
+  - Handle: 17115082117832657178
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_knee_link.STL
+    Type: MeshSource
+  - Handle: 17266494507533040842
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/R_hand_base_link.STL
+    Type: MeshSource
+  - Handle: 17328609461174050400
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_wrist_pitch_link.STL
+    Type: MeshSource
+  - Handle: 17374801328266119523
+    FilePath: Meshes/Default/Source/Sphere.gltf
+    Type: MeshSource
+  - Handle: 18078806159217429871
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_ankle_pitch_link.STL
+    Type: MeshSource
+  - Handle: 18130808224356694619
+    FilePath: Meshes/Default/Source/Capsule.gltf
+    Type: MeshSource
+  - Handle: 18268196431202099750
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/assets/left_shoulder_yaw_link.STL
+    Type: MeshSource
+  - Handle: 18354035047812969459
+    FilePath: ContentVault/Robots/UnitreeG1FiveFingers/Policies/rotator.onnx
+    Type: OnnxModel
