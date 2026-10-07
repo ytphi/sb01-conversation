@@ -105,6 +105,20 @@ python3 scripts/sb01_conversation.py en0
 
 The robot will greet you and start listening. Press `Ctrl+C` to stop — it will save a summary of the conversation automatically.
 
+### Optional — the Chatterbox voice
+
+By default the robot speaks with Microsoft Edge TTS. To use the Chatterbox voice from
+`experimental/speech-framework` instead, install that folder's requirements (Chatterbox itself from its
+GitHub repository: the 0.1.7 release on PyPI lacks options the framework uses) and start with:
+
+```bash
+SB01_VOICE=chatterbox python3 scripts/sb01_conversation.py enp2s0
+```
+
+Engines and voice clips are set in `experimental/speech-framework/config.yaml`. Arm gestures work with either
+voice. If Chatterbox cannot load or cannot say something, the program says why and uses Edge TTS.
+Set `SB01_CHATTERBOX_DEVICE=cpu` if the gesture server needs the graphics card to itself.
+
 ---
 
 ## How It Works

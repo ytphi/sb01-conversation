@@ -132,6 +132,39 @@ sidecar's environment and was checked there with the comparison video, not by a 
 
 ---
 
+### 2026-10-07 — Chatterbox voice in the main conversation program (off by default)
+
+**Status: offline tests only. NOT run on the physical G1.**
+
+`SB01_VOICE=chatterbox` makes `scripts/sb01_conversation.py` speak with the Chatterbox voice from
+`experimental/speech-framework`, using that framework's own engines, `config.yaml` and voice clips
+through `teleop/voice_chatterbox.py`. Unset or `edge` = Edge TTS, unchanged.
+
+- **Loaded once**, at startup. Nothing is reloaded per sentence.
+- **Gestures are unchanged.** The gesture server receives Chatterbox's audio exactly as it received
+  Edge TTS audio, so speech gestures follow the real sound. Audio is fully synthesized before the
+  gesture is requested, and the gesture starts with the first audio chunk, as before.
+- **Fallback.** If Chatterbox cannot load (package or model missing, not enough GPU memory) the program
+  says why and uses Edge TTS. If it fails on one reply, that reply is spoken with Edge TTS; after three
+  failures in a row it is left off for the session.
+- **Teaching gestures are placed by estimate.** Chatterbox reports no word times. With
+  `SB01_GESTURE_CUES=1`, sentences are synthesized one by one so each sentence's start and length are
+  measured; a word's time inside its sentence is estimated from its position in the text. The program
+  prints that this is an estimate. Edge TTS still gives real word times.
+- **GPU, measured on the development laptop (RTX 3050, 6 GB).** Chatterbox's two engines alone use about
+  5.7 GB and make a reply in 1.4-2.4 s. The gesture server uses about 1.3 GB. Sharing that card works but
+  fills it, and replies then took 5-12 s to synthesize. With `SB01_CHATTERBOX_DEVICE=cpu` the card is left
+  to the gesture server and replies took 5-14 s. A card with clearly more than 8 GB, or the gesture server
+  on another machine, is needed for both to be fast.
+- **Install note.** The framework calls Chatterbox with options (`nano`, `t3_model`) that the 0.1.7 release
+  on PyPI does not have; it needs Chatterbox installed from its GitHub repository. With the PyPI release the
+  program reports the mismatch and uses Edge TTS.
+
+**Tests:** `python3 -m unittest tests.test_voice` (stand-in voice engine; no model needed). Also checked with
+the real Chatterbox models, the real gesture server and a stand-in robot.
+
+---
+
 ## Pending / Next Steps
 
 - [ ] Implement Claude streaming response + per-sentence TTS (reduce latency)

@@ -56,6 +56,7 @@ from teleop.face_id import FaceIdentifier
 from teleop.memory_manager import MemoryManager
 from teleop.gesture_client import GestureClient, GESTURE_SAMPLE_RATE
 from teleop import gesture_cues
+from teleop.voice_chatterbox import ChatterboxVoice, VoiceUnavailable
 
 # ── config ───────────────────────────────────────────────────────────────────
 NETWORK_INTERFACE = "enp2s0"
@@ -83,6 +84,12 @@ THINKING_POSE_SECONDS = 6.0   # longest the pose is held if the reply is slow
 # reply ("look at the [point] diagram") and the arm gesture arrives on that word.
 # SB01_BOARD_SIDE=left|right says where the board or screen is, for pointing.
 GESTURE_CUES = os.environ.get("SB01_GESTURE_CUES", "").strip() == "1" and bool(GESTURE_URL)
+# Which voice speaks. SB01_VOICE=chatterbox uses the Chatterbox voice from
+# experimental/speech-framework (its config.yaml chooses engines and voice clips).
+# Unset or "edge" = Microsoft Edge TTS, as before. Edge TTS is also what is used
+# whenever Chatterbox cannot load or cannot say something.
+VOICE_BACKEND = os.environ.get("SB01_VOICE", "").strip().lower() or "edge"
+VOICE_MAX_FAILURES = 3   # Chatterbox failures in a row before it is left off for the session
 _POINT_CUE = "point_right" if os.environ.get("SB01_BOARD_SIDE", "left").strip().lower() == "right" else "point"
 CUE_PROMPT = (
     "\n\nYou can make a teaching gesture with your arms by putting a mark just before the word it "
@@ -306,6 +313,10 @@ class SB01ConversationLoop:
         self.interface   = interface
         self.web_context = web_context
         self._spoken_words: list = []   # (start seconds, word) of the current reply
+        self.voice: ChatterboxVoice | None = None   # set in setup() when SB01_VOICE=chatterbox loads
+        self._voice_failures = 0                    # Chatterbox failures in a row
+        self._words_estimated = False               # word times of the current reply are estimates
+        self._told_estimate = False
         self.audio       = AudioClient()
         self.asr_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         self.speaking    = threading.Event()
@@ -346,7 +357,27 @@ class SB01ConversationLoop:
             prompt += CUE_PROMPT
         return prompt
 
+    def _load_voice(self):
+        """Load Chatterbox if it was asked for. If it cannot load, say why and
+        carry on with Edge TTS: the conversation never depends on it."""
+        if VOICE_BACKEND == "edge":
+            return
+        if VOICE_BACKEND != "chatterbox":
+            print(f"[voice] SB01_VOICE={VOICE_BACKEND!r} is not a voice (edge or chatterbox); using Edge TTS")
+            return
+        print("[voice] loading the Chatterbox voice (this can take a minute the first time)...")
+        try:
+            voice = ChatterboxVoice()
+            voice.load()
+        except VoiceUnavailable as exc:
+            print(f"[voice] Chatterbox is NOT in use: {exc}")
+            print("[voice] using Edge TTS instead")
+            return
+        self.voice = voice
+        print(f"[voice] Chatterbox ready (device: {voice.device}); Edge TTS is the fallback")
+
     def setup(self):
+        self._load_voice()
         self.audio.SetTimeout(10.0)
         self.audio.Init()
         self.audio.SetVolume(100)
@@ -420,8 +451,43 @@ class SB01ConversationLoop:
             return VOICE_ES
         return VOICE_EN
 
+    def _speech_language(self, text: str, language: str | None) -> str:
+        """en, es or zh for this text, by the same rule that picks the Edge voice."""
+        picked = self._pick_voice(text)
+        if picked == VOICE_ZH:
+            return "zh"
+        if picked == VOICE_ES or language == "es":
+            return "es"
+        return "zh" if language == "zh" else "en"
+
+    def _chatterbox_pcm(self, text: str, language: str | None) -> tuple[bytes, bytes | None] | None:
+        """The same as _text_to_pcm(), from Chatterbox. None if it could not,
+        with the reason printed; the caller then uses Edge TTS."""
+        try:
+            # With teaching gestures on, sentences are synthesized one by one so
+            # each one's start time is measured; word times within it are estimates.
+            speech = self.voice.synthesize(text, self._speech_language(text, language),
+                                           split=GESTURE_CUES, gesture_audio=bool(self.gestures))
+        except VoiceUnavailable as exc:
+            self._voice_failures += 1
+            print(f"[voice] Chatterbox could not say this ({exc}); using Edge TTS for it")
+            if self._voice_failures >= VOICE_MAX_FAILURES:
+                print(f"[voice] Chatterbox failed {VOICE_MAX_FAILURES} times in a row: "
+                      f"using Edge TTS for the rest of this session")
+                self.voice = None
+            return None
+        self._voice_failures = 0
+        self._spoken_words = speech.words if GESTURE_CUES else []
+        self._words_estimated = True
+        return speech.pcm, speech.gesture_pcm
+
     async def _text_to_pcm(self, text: str, language: str | None = None) -> tuple[bytes, bytes | None]:
         """Returns (playback PCM, gesture-model PCM or None if gestures are off)."""
+        self._words_estimated = False
+        if self.voice is not None:
+            made = self._chatterbox_pcm(text, language)
+            if made is not None:
+                return made
         voice = self._pick_voice(text)
         if voice == VOICE_EN and language in ("es", "zh"):
             voice = LANGUAGE_VOICES[language]   # e.g. a Spanish reply with no accented letters
@@ -496,6 +562,10 @@ class SB01ConversationLoop:
             pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text, language))
             # Arms are taken and the first second of motion is ready, or no gesture.
             cues = gesture_cues.timed(marks, self._spoken_words, text) if marks else []
+            if cues and self._words_estimated and not self._told_estimate:
+                self._told_estimate = True
+                print("[voice] Chatterbox reports no word times: teaching gestures are placed by "
+                      "estimate, from each sentence's measured length")
             if cues:
                 gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm, cues=cues)
             else:
