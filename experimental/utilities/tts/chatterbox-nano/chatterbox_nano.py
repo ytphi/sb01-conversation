@@ -1,7 +1,8 @@
 """
 chatterbox_nano.py  -  Chatterbox Nano (110M, English only, fast on CPU/edge)
 
-pip install chatterbox-tts
+Install with experimental/speech-framework/requirements.txt (Chatterbox pinned to one commit;
+the 0.1.7 release on PyPI lacks options used here).
 Supports paralinguistic tags in text, e.g. "[laugh]", "[chuckle]".
 """
 

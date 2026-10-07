@@ -12,8 +12,11 @@ Claude or network needed). Same stand-ins as tests/test_language.py otherwise.
 import contextlib
 import io
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -34,6 +37,10 @@ class _Engine:
 
     def __init__(self):
         self.preloads, self.said, self.fail, self.bad = 0, [], None, None
+        self.fail_on = None                 # fail only when this text is asked for
+        # what the real SpeechSynth keeps: its loaded engines, each holding a model
+        self._engines = {"nano": types.SimpleNamespace(model=object()),
+                         "multilingual": types.SimpleNamespace(model=object())}
 
     def preload(self):
         self.preloads += 1
@@ -42,7 +49,7 @@ class _Engine:
 
     def synthesize(self, text, language):
         self.said.append((text, language))
-        if isinstance(self.fail, Exception):
+        if isinstance(self.fail, Exception) and self.fail_on in (None, text):
             raise self.fail
         if self.bad is not None:
             return self.bad
@@ -197,7 +204,8 @@ class WhenChatterboxIsNotAvailable(unittest.TestCase):
         loop, robot, printed = self._load(ChatterboxVoice=lambda: _voice(engine))
         self.assertIsNone(loop.voice)
         self.assertIn("ran out of memory", printed)
-        self.assertIn("SB01_CHATTERBOX_DEVICE=cpu", printed)
+        self.assertIn("runs on the processor", printed)               # what to do about it
+        self.assertEqual(engine._engines, {})                          # the half-loaded models were let go
         self._assert_edge_still_speaks(loop, robot)
 
     def test_a_package_version_that_does_not_match_is_reported(self):
@@ -205,6 +213,358 @@ class WhenChatterboxIsNotAvailable(unittest.TestCase):
         engine.fail = TypeError("from_pretrained() got an unexpected keyword argument 'nano'")
         _, _, printed = self._load(ChatterboxVoice=lambda: _voice(engine))
         self.assertIn("does not match the speech framework", printed)
+
+
+@contextlib.contextmanager
+def _framework(tts_config, to_pcm16=_to_pcm16):
+    """A throw-away copy of the speech framework's shape (settings, SpeechSynth,
+    to_pcm16) holding `tts_config`, so the real loading code can be run without
+    the Chatterbox package. Yields the list of configs SpeechSynth was built with."""
+    folder = tempfile.mkdtemp(prefix="sb01-fake-framework-")
+    built = []
+    names = ("_paths", "settings", "speech_synth", "tts_common")
+    saved = {name: sys.modules.pop(name, None) for name in names}
+    for name in names:
+        open(os.path.join(folder, name + ".py"), "w").close()
+
+    class Synth(_Engine):
+        def __init__(self, config):
+            super().__init__()
+            built.append(dict(config))
+
+    fakes = {
+        "_paths": types.ModuleType("_paths"),
+        "settings": types.ModuleType("settings"),
+        "speech_synth": types.ModuleType("speech_synth"),
+        "tts_common": types.ModuleType("tts_common"),
+    }
+    fakes["settings"].load_settings = lambda: {"tts": tts_config}
+    fakes["settings"].resolve_path = lambda path: os.path.join(folder, path) if path else None
+    fakes["speech_synth"].SpeechSynth = Synth
+    fakes["tts_common"].to_pcm16 = to_pcm16
+    path_before = list(sys.path)
+    try:
+        with mock.patch.object(vc, "FRAMEWORK_DIR", folder), mock.patch.dict(sys.modules, fakes):
+            yield built
+    finally:
+        sys.path[:] = path_before
+        for name, module in saved.items():
+            if module is not None:
+                sys.modules[name] = module
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+GOOD_CONFIG = {"device": "auto", "preload": True,
+               "languages": {"en": {"engine": "nano", "voice": None},
+                             "es": {"engine": "multilingual", "voice": None}}}
+
+
+class WhereChatterboxRuns(unittest.TestCase):
+    """The graphics card is the gesture server's: Chatterbox uses it only when told to, and only if it fits."""
+
+    def setUp(self):
+        self._env = {name: os.environ.pop(name, None) for name in ("SB01_CHATTERBOX_DEVICE", "SB01_CHATTERBOX_GPU_GB")}
+
+    def tearDown(self):
+        for name, value in self._env.items():
+            os.environ.pop(name, None)
+            if value is not None:
+                os.environ[name] = value
+
+    def test_the_processor_is_the_default(self):
+        for asked in (None, "", "auto", "AUTO", " cpu "):
+            with mock.patch.object(vc, "gpu_free_gb", side_effect=AssertionError("the card must not even be asked")):
+                self.assertEqual(vc.choose_device(asked)[0], "cpu", asked)
+
+    def test_auto_never_means_the_graphics_card_even_with_a_large_one(self):
+        with mock.patch.object(vc, "gpu_free_gb", return_value=24.0):
+            device, why = vc.choose_device("auto")
+        self.assertEqual(device, "cpu")
+        self.assertIn("left to the gesture server", why)
+
+    def test_cuda_is_used_only_when_asked_for_and_enough_memory_is_free(self):
+        with mock.patch.object(vc, "gpu_free_gb", return_value=11.5):
+            device, why = vc.choose_device("cuda")
+        self.assertEqual(device, "cuda")
+        self.assertIn("11.5 GB", why)
+
+    def test_cuda_on_a_6_gb_card_falls_back_to_the_processor_before_loading_anything(self):
+        for free in (6.0, 4.7, 0.3):                      # an empty 6 GB card; the same card with the gesture server on it
+            with mock.patch.object(vc, "gpu_free_gb", return_value=free):
+                device, why = vc.choose_device("cuda")
+            self.assertEqual(device, "cpu", free)
+            self.assertIn(f"only {free:.1f} GB of graphics memory is free", why)
+            self.assertIn("needs about 7.0 GB", why)
+            self.assertIn("runs on the processor", why)
+
+    def test_cuda_without_a_usable_card_runs_on_the_processor(self):
+        with mock.patch.object(vc, "gpu_free_gb", return_value=None):
+            device, why = vc.choose_device("cuda")
+        self.assertEqual(device, "cpu")
+        self.assertIn("no usable graphics card", why)
+
+    def test_the_memory_requirement_can_be_changed_on_purpose(self):
+        os.environ["SB01_CHATTERBOX_GPU_GB"] = "5"
+        with mock.patch.object(vc, "gpu_free_gb", return_value=6.0):
+            self.assertEqual(vc.choose_device("cuda")[0], "cuda")
+        os.environ["SB01_CHATTERBOX_GPU_GB"] = "not a number"
+        with mock.patch.object(vc, "gpu_free_gb", return_value=6.0):
+            self.assertEqual(vc.choose_device("cuda")[0], "cpu")           # nonsense: the safe requirement stays
+
+    def test_an_unknown_device_name_is_refused(self):
+        with self.assertRaises(vc.VoiceUnavailable) as raised:
+            vc.choose_device("gpu0")
+        self.assertIn("use cpu or cuda", str(raised.exception))
+
+    def test_the_framework_is_never_handed_auto(self):
+        with _framework(dict(GOOD_CONFIG)) as built, mock.patch.object(vc, "gpu_free_gb", return_value=24.0):
+            voice = vc.ChatterboxVoice()
+        self.assertEqual(built[0]["device"], "cpu")                        # config said auto; a 24 GB card was there
+        self.assertEqual(voice.device, "cpu")
+
+    def test_the_setting_overrides_the_config_file(self):
+        os.environ["SB01_CHATTERBOX_DEVICE"] = "cuda"
+        with _framework(dict(GOOD_CONFIG)) as built, mock.patch.object(vc, "gpu_free_gb", return_value=12.0):
+            voice = vc.ChatterboxVoice()
+        self.assertEqual((built[0]["device"], voice.device), ("cuda", "cuda"))
+        os.environ["SB01_CHATTERBOX_DEVICE"] = "cpu"
+        with _framework(dict(GOOD_CONFIG, device="cuda")) as built, mock.patch.object(vc, "gpu_free_gb", return_value=12.0):
+            self.assertEqual(vc.ChatterboxVoice().device, "cpu")
+
+    def test_cuda_in_the_config_file_is_also_checked_against_free_memory(self):
+        with _framework(dict(GOOD_CONFIG, device="cuda")) as built, mock.patch.object(vc, "gpu_free_gb", return_value=6.0):
+            voice = vc.ChatterboxVoice()
+        self.assertEqual(built[0]["device"], "cpu")
+        self.assertIn("only 6.0 GB", voice.device_note)
+
+    def test_startup_says_where_it_runs_and_what_that_costs(self):
+        loop, _ = _loop(engine=False)
+        out = io.StringIO()
+        with mock.patch.object(script, "VOICE_BACKEND", "chatterbox"), \
+                mock.patch.object(script, "ChatterboxVoice", lambda: vc.ChatterboxVoice(synth=_Engine(), to_pcm16=_to_pcm16, device="auto")), \
+                contextlib.redirect_stdout(out):
+            loop._load_voice()
+        printed = out.getvalue()
+        self.assertIn("Chatterbox ready on the processor", printed)
+        self.assertIn("left to the gesture server", printed)
+        self.assertIn("expect a pause before each one", printed)
+
+
+class VoiceSettings(unittest.TestCase):
+    """A wrong voice setting is found at startup, with a reason, and Edge TTS carries on."""
+
+    def _refused(self, config):
+        with _framework(config):
+            with self.assertRaises(vc.VoiceUnavailable) as raised:
+                vc.ChatterboxVoice()
+        return str(raised.exception)
+
+    def test_a_voice_clip_that_is_not_there(self):
+        config = dict(GOOD_CONFIG, languages={"en": {"engine": "nano", "voice": "../voice-refs/en_yotie.wav"}})
+        reason = self._refused(config)
+        self.assertIn("the voice clip for 'en' was not found: en_yotie.wav", reason)
+        self.assertIn("tts.languages.en.voice", reason)
+
+    def test_an_engine_name_that_does_not_exist(self):
+        reason = self._refused(dict(GOOD_CONFIG, languages={"en": {"engine": "turbo-max"}}))
+        self.assertIn("tts.languages.en.engine is 'turbo-max'", reason)
+        self.assertIn("nano, multilingual", reason)
+
+    def test_no_languages_at_all(self):
+        self.assertIn("no tts.languages", self._refused({"device": "cpu"}))
+
+    def test_a_voice_clip_that_exists_is_accepted(self):
+        with _framework(dict(GOOD_CONFIG, languages={"en": {"engine": "nano", "voice": "settings.py"}})) as built:
+            vc.ChatterboxVoice()                                           # any existing file stands in for a clip
+        self.assertEqual(len(built), 1)
+
+    def test_the_program_says_so_and_speaks_with_edge(self):
+        loop, robot = _loop(engine=False)
+        out = io.StringIO()
+        config = dict(GOOD_CONFIG, languages={"en": {"engine": "nano", "voice": "missing.wav"}})
+        with _framework(config), mock.patch.object(script, "VOICE_BACKEND", "chatterbox"), contextlib.redirect_stdout(out):
+            loop._load_voice()
+        self.assertIsNone(loop.voice)
+        self.assertIn("Chatterbox is NOT in use: the voice clip for 'en' was not found", out.getvalue())
+        base.tts_calls.clear()
+        _speak(loop, "Hello there, nice to meet you.")
+        self.assertEqual(len(base.tts_calls), 1)
+        self.assertEqual(robot.events, ["gesture-start", "gesture-begin", "audio"])
+
+
+class LettingGoOfMemory(unittest.TestCase):
+    def test_a_failed_load_lets_go_of_what_it_had_loaded(self):
+        engine = _Engine()
+        engine.fail = RuntimeError("CUDA out of memory")
+        voice = _voice(engine)
+        models = list(engine._engines.values())
+        with mock.patch.object(vc.ChatterboxVoice, "_free_gpu") as freed:
+            with self.assertRaises(vc.VoiceUnavailable):
+                voice.load()
+        self.assertEqual(engine._engines, {})
+        self.assertTrue(all(model.model is None for model in models))
+        self.assertTrue(freed.called)
+        self.assertFalse(voice.loaded)
+
+    def test_out_of_memory_while_speaking_clears_the_card_and_the_reply_is_spoken_once_by_edge(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        engine.fail = RuntimeError("CUDA out of memory. Tried to allocate 20.00 MiB")
+        base.tts_calls.clear()
+        with mock.patch.object(vc.ChatterboxVoice, "_free_gpu") as freed:
+            printed = _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertTrue(freed.called)
+        self.assertIn("ran out of memory", printed)
+        self.assertEqual(len(base.tts_calls), 1)
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
+        self.assertEqual(robot.events, ["gesture-start", "gesture-begin", "audio"])     # gestures carried on
+
+    def test_after_three_failures_the_models_are_let_go_and_never_tried_again(self):
+        engine = _Engine()
+        loop, _ = _loop(engine)
+        engine.fail = RuntimeError("boom")
+        for i in range(3):
+            _speak(loop, f"Reply number {i} for you.", "en")
+        self.assertIsNone(loop.voice)
+        self.assertEqual(engine._engines, {})
+        tried = len(engine.said)
+        for i in range(5):
+            _speak(loop, f"Later reply number {i}.", "en")
+        self.assertEqual(len(engine.said), tried)
+
+    def test_close_is_safe_to_call_twice_and_before_loading(self):
+        voice = _voice()
+        voice.close()
+        voice.load()
+        voice.close()
+        voice.close()
+        self.assertFalse(voice.loaded)
+
+
+class NoHalfReplies(unittest.TestCase):
+    """A reply is either wholly Chatterbox or wholly Edge TTS; never part of one and then the other."""
+
+    REPLY = "That is a very good answer today. Now look at the diagram on the board. Does anyone have a question?"
+
+    def test_a_failure_on_a_later_sentence_plays_nothing_from_chatterbox(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        engine.fail, engine.fail_on = RuntimeError("boom"), "Now look at the diagram on the board."
+        base.tts_calls.clear()
+        with mock.patch.object(script, "GESTURE_CUES", True):
+            printed = _speak(loop, self.REPLY, "en")
+        self.assertEqual(len(engine.said), 2)                              # the first sentence had been made
+        self.assertIn("using Edge TTS for it", printed)
+        self.assertEqual(base.tts_calls[0][1], self.REPLY)                 # Edge said the whole reply
+        self.assertEqual(len(base.tts_calls), 1)
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)   # and only Edge's audio was played
+        self.assertEqual(robot.events, ["gesture-start", "gesture-begin", "audio"])
+
+    def test_audio_is_whole_before_anything_is_played_or_moved(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        order = []
+        real = engine.synthesize
+        engine.synthesize = lambda text, language: (order.append("made"), real(text, language))[1]
+        robot.PlayStream = lambda app, stream, pcm: order.append("played")
+        robot.start = lambda pcm, **kw: (order.append("gesture"), True)[1]
+        with mock.patch.object(script, "GESTURE_CUES", True):
+            _speak(loop, self.REPLY, "en")
+        self.assertEqual(order[:5], ["made", "made", "made", "gesture", "played"])
+        self.assertEqual(set(order[5:]), {"played"})                       # the rest is the same audio, in 3 s chunks
+
+
+class JoinedSentences(unittest.TestCase):
+    """Sentence-by-sentence audio: nothing repeated or lost, no clicks, no long gaps, right format."""
+
+    TEXT = ("That is a very good answer today. Now look at the diagram on the board. "
+            "The gap is very small, but the effect is huge. Does anyone have a question?")
+
+    def _loud_runs(self, pcm, rate=vc.PLAYBACK_RATE):
+        samples = np.abs(np.frombuffer(pcm, dtype="<i2").astype(np.float32))
+        loud = samples > 0.02 * samples.max()
+        edges = np.flatnonzero(np.diff(np.concatenate(([0], loud.astype(np.int8), [0]))))
+        runs = [(a / rate, b / rate) for a, b in zip(edges[::2], edges[1::2])]
+        merged = [runs[0]]
+        for a, b in runs[1:]:                           # zero crossings inside a tone are not gaps
+            if a - merged[-1][1] < 0.05:
+                merged[-1] = (merged[-1][0], b)
+            else:
+                merged.append((a, b))
+        return merged
+
+    def test_every_sentence_is_there_once_and_in_order(self):
+        speech = _voice().synthesize(self.TEXT, "en", split=True)
+        pieces = vc.sentences(self.TEXT)
+        runs = self._loud_runs(speech.pcm)
+        self.assertEqual(speech.pieces, 4)
+        self.assertEqual(len(runs), 4)                                     # four stretches of speech, not three or five
+        for (start, end), piece in zip(runs, pieces):
+            self.assertAlmostEqual(end - start, len(piece) * SECONDS_PER_LETTER, delta=0.03)
+
+    def test_gaps_between_sentences_are_short_and_never_missing(self):
+        runs = self._loud_runs(_voice().synthesize(self.TEXT, "en", split=True).pcm)
+        gaps = [later[0] - earlier[1] for earlier, later in zip(runs, runs[1:])]
+        longest = vc.TAIL_SILENCE_SECONDS + vc.SENTENCE_GAP_SECONDS + vc.LEAD_SILENCE_SECONDS + 0.02
+        for gap in gaps:
+            self.assertGreater(gap, vc.SENTENCE_GAP_SECONDS - 0.01)
+            self.assertLessEqual(gap, longest)
+
+    def test_long_silence_from_the_engine_is_cut_back_but_speech_is_not(self):
+        wave = np.concatenate((np.zeros(RATE), 0.5 * np.ones(RATE // 2, dtype=np.float32), np.zeros(2 * RATE))).astype(np.float32)
+        tidy = vc.ChatterboxVoice._tidied(wave, RATE)
+        first, last = vc.ChatterboxVoice._spoken_span(tidy)
+        self.assertAlmostEqual(first / RATE, vc.LEAD_SILENCE_SECONDS, delta=0.01)
+        self.assertAlmostEqual((len(tidy) - 1 - last) / RATE, vc.TAIL_SILENCE_SECONDS, delta=0.01)
+        self.assertAlmostEqual((last - first) / RATE, 0.5, delta=0.005)    # all of the speech is still there
+
+    def test_each_piece_starts_and_ends_at_zero_so_a_join_cannot_click(self):
+        loud = 0.8 * np.ones(RATE, dtype=np.float32)                       # audio that starts and stops abruptly
+        tidy = vc.ChatterboxVoice._tidied(loud, RATE)
+        self.assertEqual(tidy[0], 0.0)
+        self.assertEqual(tidy[-1], 0.0)
+        self.assertLess(np.abs(np.diff(tidy)).max(), 0.8 / (vc.FADE_SECONDS * RATE) + 1e-3)   # no jump anywhere
+
+    def test_a_reply_spoken_in_one_piece_is_not_altered(self):
+        engine = _Engine()
+        text = "Hello there, nice to meet you."
+        speech = _voice(engine).synthesize(text, "en")
+        wave, rate = _Engine().synthesize(text, "en")
+        self.assertEqual(speech.pcm, _to_pcm16(wave, rate, vc.PLAYBACK_RATE))
+        self.assertEqual(speech.pieces, 1)
+
+    def test_the_audio_is_what_the_robot_speaker_takes(self):
+        speech = _voice().synthesize(self.TEXT, "en", split=True)
+        samples = np.frombuffer(speech.pcm, dtype="<i2")                   # 16-bit little-endian, one channel
+        self.assertEqual(len(speech.pcm) % 2, 0)
+        self.assertAlmostEqual(len(samples) / vc.PLAYBACK_RATE, speech.seconds, delta=0.01)       # 16 kHz
+        self.assertAlmostEqual(len(speech.gesture_pcm) / 2 / vc.GESTURE_RATE, speech.seconds, delta=0.01)
+        self.assertLess(np.abs(samples).max(), 32767)                      # not clipped
+        self.assertGreater(np.abs(samples).max(), 3000)                    # and not faint
+
+    def test_audio_louder_than_full_scale_is_limited_not_wrapped(self):
+        engine = _Engine()
+        engine.bad = (1.7 * np.sin(np.arange(RATE) * 0.05).astype(np.float32), RATE)
+        samples = np.frombuffer(_voice(engine).synthesize("Hello there, nice to meet you.", "en").pcm, dtype="<i2")
+        self.assertEqual(int(np.abs(samples.astype(np.int32)).max()), 32767)
+        self.assertLess(np.abs(np.diff(samples.astype(np.int32))).max(), 6000)        # no wrap-around jumps
+
+    def test_a_long_reply_with_gestures_keeps_each_gesture_in_its_own_sentence(self):
+        loop, robot = _loop()
+        reply = ("That is a very good answer today. Now look at the [point] diagram on the board. "
+                 "The gap is very [small] small, but the effect is [big] huge. [ask] Does anyone have a question?")
+        with mock.patch.object(script, "GESTURE_CUES", True):
+            _speak(loop, reply, "en")
+        spoken, _ = script.gesture_cues.split(reply)
+        runs = self._loud_runs(b"".join(robot.played))
+        cues = {cue["name"]: cue["time"] for cue in robot.starts[0][1]["cues"]}
+        self.assertEqual(list(cues), ["point", "small", "big", "ask"])
+        self.assertTrue(runs[1][0] < cues["point"] < runs[1][1])
+        self.assertTrue(runs[2][0] < cues["small"] < cues["big"] < runs[2][1])
+        self.assertTrue(runs[3][0] - 0.01 <= cues["ask"] < runs[3][1])
+        self.assertEqual(robot.events[:3], ["gesture-start", "gesture-begin", "audio"])
+        self.assertEqual(set(robot.events[3:]), {"audio"})                 # one gesture request; audio sent in chunks
+        self.assertEqual(len(vc.sentences(spoken)), 4)
 
 
 class SpeakingWithChatterbox(unittest.TestCase):
@@ -372,7 +732,7 @@ class TeachingGesturesWithChatterbox(unittest.TestCase):
         self.assertEqual([word for _, word in speech.words],
                          ["One", "two", "three", "four", "Five", "six", "seven", "eight", "nine", "ten"])
         self.assertEqual(times, sorted(times))
-        self.assertGreaterEqual(times[0], EDGE - 0.01)                             # after the leading silence
+        self.assertGreaterEqual(times[0], vc.LEAD_SILENCE_SECONDS - 0.01)          # after the leading silence
         self.assertLess(times[-1], speech.seconds)
 
     def test_chinese_is_timed_character_by_character(self):

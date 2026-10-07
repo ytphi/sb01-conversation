@@ -88,6 +88,8 @@ GESTURE_CUES = os.environ.get("SB01_GESTURE_CUES", "").strip() == "1" and bool(G
 # experimental/speech-framework (its config.yaml chooses engines and voice clips).
 # Unset or "edge" = Microsoft Edge TTS, as before. Edge TTS is also what is used
 # whenever Chatterbox cannot load or cannot say something.
+# Chatterbox runs on the processor unless SB01_CHATTERBOX_DEVICE=cuda is set
+# (see teleop/voice_chatterbox.py): the graphics card is the gesture server's.
 VOICE_BACKEND = os.environ.get("SB01_VOICE", "").strip().lower() or "edge"
 VOICE_MAX_FAILURES = 3   # Chatterbox failures in a row before it is left off for the session
 _POINT_CUE = "point_right" if os.environ.get("SB01_BOARD_SIDE", "left").strip().lower() == "right" else "point"
@@ -374,7 +376,12 @@ class SB01ConversationLoop:
             print("[voice] using Edge TTS instead")
             return
         self.voice = voice
-        print(f"[voice] Chatterbox ready (device: {voice.device}); Edge TTS is the fallback")
+        where = "the processor" if voice.device == "cpu" else f"the graphics card ({voice.device})"
+        print(f"[voice] Chatterbox ready on {where}; Edge TTS is the fallback")
+        if voice.device_note:
+            print(f"[voice] {voice.device_note}")
+        if voice.device == "cpu":
+            print("[voice] on the processor replies are slow to synthesize: expect a pause before each one")
 
     def setup(self):
         self._load_voice()
@@ -474,6 +481,7 @@ class SB01ConversationLoop:
             if self._voice_failures >= VOICE_MAX_FAILURES:
                 print(f"[voice] Chatterbox failed {VOICE_MAX_FAILURES} times in a row: "
                       f"using Edge TTS for the rest of this session")
+                self.voice.close()       # give back its models and memory; it is not tried again
                 self.voice = None
             return None
         self._voice_failures = 0

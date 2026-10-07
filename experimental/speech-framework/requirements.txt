@@ -9,8 +9,12 @@ google-genai          # gemini
 openai                # deepseek (OpenAI-compatible API)
 anthropic             # claude
 
-# TTS: Chatterbox Nano + Multilingual (pulls in torch / torchaudio)
-chatterbox-tts
+# TTS: Chatterbox Nano + Multilingual (pulls in torch / torchaudio).
+# Pinned to an exact commit of the Chatterbox repository: the framework uses
+# from_pretrained(nano=...) and from_pretrained(t3_model=...), which the 0.1.7
+# release on PyPI does not have (this commit also calls itself 0.1.7).
+# Needs git on the machine. Tested with Python 3.10.
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2
 
 # STT on the PC (stt.source: g1-mic / pc-mic). Not needed for g1-asr.
 faster-whisper

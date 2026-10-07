@@ -142,25 +142,63 @@ through `teleop/voice_chatterbox.py`. Unset or `edge` = Edge TTS, unchanged.
 
 - **Loaded once**, at startup. Nothing is reloaded per sentence.
 - **Gestures are unchanged.** The gesture server receives Chatterbox's audio exactly as it received
-  Edge TTS audio, so speech gestures follow the real sound. Audio is fully synthesized before the
-  gesture is requested, and the gesture starts with the first audio chunk, as before.
-- **Fallback.** If Chatterbox cannot load (package or model missing, not enough GPU memory) the program
-  says why and uses Edge TTS. If it fails on one reply, that reply is spoken with Edge TTS; after three
-  failures in a row it is left off for the session.
+  Edge TTS audio, so speech gestures follow the real sound. A reply's audio is made completely before
+  the gesture is requested or anything is played, and the gesture starts with the first audio chunk.
+- **Fallback.** If Chatterbox cannot load (package or model missing, wrong voice setting, not enough
+  memory) the program says why, lets go of whatever was loaded, and uses Edge TTS. If it fails on one
+  reply, that whole reply is spoken with Edge TTS; nothing of Chatterbox's is played for it. After three
+  failures in a row its models are released and it is not tried again that session.
 - **Teaching gestures are placed by estimate.** Chatterbox reports no word times. With
   `SB01_GESTURE_CUES=1`, sentences are synthesized one by one so each sentence's start and length are
   measured; a word's time inside its sentence is estimated from its position in the text. The program
   prints that this is an estimate. Edge TTS still gives real word times.
-- **GPU, measured on the development laptop (RTX 3050, 6 GB).** Chatterbox's two engines alone use about
-  5.7 GB and make a reply in 1.4-2.4 s. The gesture server uses about 1.3 GB. Sharing that card works but
-  fills it, and replies then took 5-12 s to synthesize. With `SB01_CHATTERBOX_DEVICE=cpu` the card is left
-  to the gesture server and replies took 5-14 s. A card with clearly more than 8 GB, or the gesture server
-  on another machine, is needed for both to be fast.
-- **Install note.** The framework calls Chatterbox with options (`nano`, `t3_model`) that the 0.1.7 release
-  on PyPI does not have; it needs Chatterbox installed from its GitHub repository. With the PyPI release the
-  program reports the mismatch and uses Edge TTS.
+- **Joined sentences.** Each sentence keeps at most 0.08 s of leading and 0.18 s of trailing silence, is
+  faded over 5 ms at both ends, and is followed by a 0.12 s pause, so a join cannot click or leave a long
+  gap. A reply spoken in one piece is passed through unaltered.
 
-**Tests:** `python3 -m unittest tests.test_voice` (stand-in voice engine; no model needed). Also checked with
+**Where it runs (changed after review).** The processor is the default. `auto` means cpu here; it never
+selects the graphics card. `SB01_CHATTERBOX_DEVICE=cuda` (or `tts.device: cuda` in the framework's config)
+is honored only if `SB01_CHATTERBOX_GPU_GB` (default 7) of graphics memory is free at startup; otherwise
+Chatterbox runs on the processor and says so.
+
+Measured on the development laptop (RTX 3050, 6 GB):
+
+| Setup | Graphics memory | Time to synthesize one reply |
+|---|---|---|
+| Chatterbox alone on the card | about 5.7 of 6 GB | 1.4 to 2.4 s |
+| Gesture server alone on the card | about 1.3 GB | (not applicable) |
+| Both on the card | full (6.0 of 6 GB) | 5 to 12 s, in two test sessions |
+| Chatterbox on the processor, gesture server on the card | about 1.3 GB | 6 to 17 s for one sentence; 23 to 39 s for four sentences (12 s of speech); about 40 s for the first reply after startup |
+
+Sharing a 6 GB card ran without crashing in those two sessions, but with the memory full and the voice
+several times slower. That is not evidence it is reliable, so it is not supported and is no longer what
+`auto` does. For Chatterbox on a graphics card, use one with clearly more than 8 GB or run the gesture
+server on another machine. On the processor the voice works, but the robot is silent for the whole time
+in the table before each reply, which is slow for conversation. Loading at startup took 48 to 114 s.
+
+Limits of what was checked:
+- The free-memory check could only be exercised here as "a 6 GB card is refused". Under Windows/WSL the
+  driver reported about 5 GB free whatever other programs held, so it could not be shown to notice another
+  program's use. On the lab computer (Linux) the figure should be accurate; that is untested.
+- A real out-of-memory error could not be produced on the laptop: with the card deliberately filled and the
+  check lowered, the driver let Chatterbox spill into ordinary memory instead of failing. The handling of that
+  error (reason printed, models released, Edge TTS speaks) is covered by tests with a stand-in engine only.
+- In a four-sentence reply with a pointing gesture, the arm moved toward the pointing pose in the right
+  sentence but stopped 0.4 to 0.6 rad short of it (it starts 0.9 rad away); the collision filter held the
+  shoulder back. The same reply with Edge TTS audio stopped 0.1 to 0.3 rad short. The gesture code is
+  unchanged by this work; this is noted, not fixed.
+
+**Installation (changed after review).** `experimental/speech-framework/requirements.txt` now pins
+Chatterbox to commit `5de7a54aa4e5e2baadb0182dde554908b48b85c2` of its GitHub repository. The framework
+calls `from_pretrained(nano=...)` and `from_pretrained(t3_model=...)`, which the 0.1.7 release on PyPI does
+not have. Installing from that file was tested in a new environment (Python 3.10, torch 2.6.0).
+
+**Monitoring.** Session monitoring is not included in this branch, and this work neither adds nor changes
+it. Combining the Chatterbox voice with monitoring is a separate future step. No monitoring behavior was
+validated by this work, on the robot or otherwise.
+
+**Tests:** `python3 -m unittest discover` runs everything (`tests/__init__.py` was added so that works);
+`python3 -m unittest tests.test_voice` runs the Chatterbox tests with a stand-in engine. Also checked with
 the real Chatterbox models, the real gesture server and a stand-in robot.
 
 ---

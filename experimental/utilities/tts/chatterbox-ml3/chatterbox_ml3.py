@@ -1,7 +1,8 @@
 """
 chatterbox_ml3.py  -  Chatterbox Multilingual (t3 "v3" checkpoint, 23 languages)
 
-pip install chatterbox-tts
+Install with experimental/speech-framework/requirements.txt (Chatterbox pinned to one commit;
+the 0.1.7 release on PyPI lacks options used here).
 Used for zh / ja / es (and en, if you prefer it over Nano).
 """
 
