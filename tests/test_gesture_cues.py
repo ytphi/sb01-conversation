@@ -141,6 +141,14 @@ class InTheConversation(unittest.TestCase):
         self.assertEqual(self.loop.gestures.starts,
                          [{"cues": [{"name": "yes", "time": 1.2}, {"name": "point", "time": 3.1}]}])
 
+    def test_when_on_a_reply_that_is_only_marks_says_nothing_and_moves_nothing(self):
+        before = len(base.tts_calls)
+        with mock.patch.object(script, "GESTURE_CUES", True):
+            self.loop._speak("[yes] [point]")
+        self.assertEqual(len(base.tts_calls), before)                    # nothing sent to the voice
+        self.assertEqual(self.loop.gestures.starts, [])
+        self.assertFalse(self.loop.speaking.is_set())
+
     def test_when_on_but_the_voice_gives_no_word_times_it_gestures_as_before(self):
         with mock.patch.object(script, "GESTURE_CUES", True):
             self.loop._speak(REPLY)                                      # stand-in voice: audio only

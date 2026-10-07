@@ -487,6 +487,8 @@ class SB01ConversationLoop:
         marks = []
         if GESTURE_CUES:
             text, marks = gesture_cues.split(text)   # the marks are never spoken
+            if not text:
+                return                               # a reply that was only marks: nothing to say
         self.speaking.set()
         self.tts_done.clear()
         try:

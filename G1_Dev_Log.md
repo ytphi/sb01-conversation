@@ -99,10 +99,12 @@ RoboGesture's motion follows the sound of the speech. This adds gestures with a 
 - Enable with `SB01_GESTURE_CUES=1` (needs `SB01_GESTURE_URL`); `SB01_BOARD_SIDE=left|right` for pointing.
   Unset = behavior unchanged.
 
-**Measured on the demo sentence:** all seven cues arrived within 0.03 s of their word; motion with cues was
-smoother than the model alone (largest frame-to-frame change of speed 0.055 vs 0.080 rad/frame^2).
+**Measured on the demo sentences (English, Spanish, Chinese), in the motion after the collision filter:**
+on its word each gesture is within 0.13-0.38 rad of its pose (1.0 rad away before it starts). Gestures aim to
+be there 0.2 s before the word; pointing is a long reach the filter slows, so it sets off 0.6 s early.
+Motion with cues is no sharper than the model alone.
 
-**Tests:** `python3 -m unittest tests.test_gesture_cues` (14 tests). The blending itself runs only in the
+**Tests:** `python3 -m unittest tests.test_gesture_cues` (15 tests). The blending itself runs only in the
 sidecar's environment and was checked there with the comparison video, not by a repo test.
 
 **Not yet done:** tried with the real Claude (no API key on the development laptop), or on the robot.

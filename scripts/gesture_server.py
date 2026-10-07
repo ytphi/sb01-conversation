@@ -119,8 +119,9 @@ _ASK = (-0.05, 0.34, 0.17, -0.14, 0.0, 0.05, 0.08)
 CUES = {
     # "Yes!" / "Correct.": the right hand reaches forward and bobs gently twice.
     "yes":         {"right": (-0.27, -0.34, 0.18, -0.01, 0.0, 0.03, -0.07), "bob": ("right", 3, 0.09), "stay": 1.4},
-    "point":       {"left": _POINT},                    # to something on the robot's left
-    "point_right": {"right": _mirror(_POINT)},
+    # A long reach that the collision filter slows, so it sets off earlier.
+    "point":       {"left": _POINT, "early": 0.6},      # to something on the robot's left
+    "point_right": {"right": _mirror(_POINT), "early": 0.6},
     "one_hand":    {"left": _ONE_HAND},                 # "on one hand ..."
     "other_hand":  {"right": _mirror(_ONE_HAND)},       # "... on the other hand"
     "small":       {"left": _SMALL, "right": _mirror(_SMALL)},   # hands close together
@@ -133,6 +134,8 @@ CUE_SPEED = 0.04          # rad per frame at the fastest point of the way in (th
 CUE_IN_SECONDS = 0.9      # shortest way in; longer when the pose is far away
 CUE_STAY_SECONDS = 0.7
 CUE_OUT_SECONDS = 1.3
+CUE_EARLY_SECONDS = 0.2   # aim to be there just before the word, as people do
+CUE_FAR_MARGIN = 0.25     # rad added to the distance: the arms are rarely still at rest
 CUE_BOB_HZ = 1.5
 
 
@@ -150,13 +153,14 @@ def plan_cues(cues, hold):
     for cue in sorted(cues, key=lambda c: c["time"]):
         spec = CUES[cue["name"]]
         far = max(float(np.abs(np.asarray(spec[side]) - hold[list(POSE_ARMS[side])]).max())
-                  for side in POSE_ARMS if side in spec)
+                  for side in POSE_ARMS if side in spec) + CUE_FAR_MARGIN
         way_in = max(round(CUE_IN_SECONDS * MOTION_RATE), int(np.ceil(1.875 * far / CUE_SPEED)))
-        arrive = max(round(cue["time"] * MOTION_RATE), way_in)
+        early = spec.get("early", CUE_EARLY_SECONDS)
+        arrive = max(round((cue["time"] - early) * MOTION_RATE), way_in)
         for earlier in plan:              # the same arm is not asked for two poses at once
             if any(side in spec and side in CUES[earlier["name"]] for side in POSE_ARMS):
                 arrive = max(arrive, earlier["leave"] + way_in // 2)
-        stay = round(spec.get("stay", CUE_STAY_SECONDS) * MOTION_RATE)
+        stay = round((spec.get("stay", CUE_STAY_SECONDS) + early) * MOTION_RATE)   # still there on the word
         plan.append({"name": cue["name"], "start": arrive - way_in, "arrive": arrive, "leave": arrive + stay,
                      "end": arrive + stay + round(CUE_OUT_SECONDS * MOTION_RATE)})
     return plan
