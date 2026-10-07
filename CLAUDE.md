@@ -11,7 +11,7 @@
 
 ## Environment
 - **Robot:** Unitree G1 humanoid (sb01)
-- **Network interface:** `eno0` (Ethernet, 192.168.123.222) → G1 DDS
+- **Network interface:** `enp2s0` (Ethernet, 192.168.123.222) → G1 DDS
 - **WiFi interface:** `wlp0s20f3` → internet / Claude API
 - **Working directory:** `/home/aloha/robotics/platforms/unitree/g1`
 - **Python SDK path:** `unitree_sdk2_python/`
@@ -29,7 +29,7 @@
 ## DDS Patterns
 ```python
 # Initialize (always first)
-ChannelFactoryInitialize(0, "eno0")
+ChannelFactoryInitialize(0, "enp2s0")
 
 # Subscribe with callback
 from unitree_sdk2py.core.channel import ChannelSubscriber
@@ -51,14 +51,14 @@ from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
 > Source: `unitree_sdk2_python/README.md`
 
 - Python >= 3.8, cyclonedds == 0.10.2
-- Replace `enp2s0` in all examples with `eno0` for this machine
+- The SDK examples use `enp2s0`, which is also this machine's robot-facing interface: use them as written
 - IDL note: `idl/unitree_hg` for G1/H1-2 (not `idl/unitree_go`)
 
 **Run examples:**
 ```bash
-python3 unitree_sdk2_python/example/helloworld/subscriber.py eno0
-python3 unitree_sdk2_python/example/g1/audio/g1_audio_client_example.py eno0
-python3 unitree_sdk2_python/example/wireless_controller/wireless_controller.py eno0
+python3 unitree_sdk2_python/example/helloworld/subscriber.py enp2s0
+python3 unitree_sdk2_python/example/g1/audio/g1_audio_client_example.py enp2s0
+python3 unitree_sdk2_python/example/wireless_controller/wireless_controller.py enp2s0
 ```
 
 ## C++ SDK Reference
@@ -73,9 +73,9 @@ cmake .. && make
 
 **Run C++ examples:**
 ```bash
-../unitree_sdk2/bin/g1_ankle_swing_example eno0
-../unitree_sdk2/bin/g1_arm5_sdk_dds_example eno0
-../unitree_sdk2/bin/g1_arm7_sdk_dds_example eno0
+../unitree_sdk2/bin/g1_ankle_swing_example enp2s0
+../unitree_sdk2/bin/g1_arm5_sdk_dds_example enp2s0
+../unitree_sdk2/bin/g1_arm7_sdk_dds_example enp2s0
 ```
 
 ## G1 Joint Index (arm7 layout)

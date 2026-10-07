@@ -49,7 +49,7 @@ def check(ok: bool, text: str):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    parser.add_argument("interface", nargs="?", default="eno0")
+    parser.add_argument("interface", nargs="?", default="enp2s0")
     parser.add_argument("--publish", action="store_true",
                         help="send one command with blend weight 0 (does not move the robot)")
     parser.add_argument("--no-robot", action="store_true",

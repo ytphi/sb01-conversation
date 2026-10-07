@@ -16,7 +16,7 @@
 **Goal:** Build a voice-interactive LLM conversation loop using G1's built-in ASR + Claude API + TTS.
 
 **Network setup confirmed:**
-- `eno0` (192.168.123.222) — Ethernet to G1, handles all DDS
+- `enp2s0` (192.168.123.222) — Ethernet to G1, handles all DDS
 - `wlp0s20f3` — WiFi, routes Claude API calls automatically
 
 **ASR findings:**

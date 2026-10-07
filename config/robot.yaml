@@ -1,6 +1,6 @@
 robot:
   ip: "192.168.123.1"       # G1 default; change if different
-  network_interface: "eno0" # interface connected to G1; check with `ip link`
+  network_interface: "enp2s0" # interface connected to G1; check with `ip link`
   control_freq: 100         # Hz
   dof: 29                   # confirmed 29-DOF G1 U2
 

@@ -10,8 +10,8 @@ Features:
   - Optional co-speech arm gestures via scripts/gesture_server.py
 
 Network layout:
-  eno0 (Ethernet, 192.168.123.x)  -- DDS: ASR messages in, TTS/LED commands out
-  wlp0s20f3 (WiFi)                -- Claude API + web fetches over the internet
+  enp2s0 (Ethernet, 192.168.123.x)  -- DDS: ASR messages in, TTS/LED commands out
+  wlp0s20f3 (WiFi)                  -- Claude API + web fetches over the internet
 
 Usage:
   python3 scripts/sb01_conversation.py [network_interface]
@@ -58,7 +58,7 @@ from teleop.gesture_client import GestureClient, GESTURE_SAMPLE_RATE
 from teleop import gesture_cues
 
 # ── config ───────────────────────────────────────────────────────────────────
-NETWORK_INTERFACE = "eno0"
+NETWORK_INTERFACE = "enp2s0"
 ROBOT_NAME        = "Yotie"
 ASR_TOPIC         = "rt/audio_msg"
 VOICE_EN = "en-US-JennyNeural"

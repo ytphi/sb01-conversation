@@ -161,7 +161,7 @@ memory/
 
 | Interface | Role |
 |---|---|
-| `eno0` (Ethernet, `192.168.123.222`) | DDS — ASR in, TTS / LED out |
+| `enp2s0` (Ethernet, `192.168.123.222`) | DDS — ASR in, TTS / LED out |
 | `wlp0s20f3` (WiFi) | Claude API + weather / web fetches |
 
 The G1 uses [Unitree SDK2](https://github.com/unitreerobotics/unitree_sdk2_python) for DDS communication. `setup.sh` installs this for you.
