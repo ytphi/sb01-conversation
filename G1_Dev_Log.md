@@ -43,7 +43,7 @@ sudo apt install ffmpeg
 
 **Run:**
 ```bash
-python3 scripts/sb01_conversation.py eno0
+python3 scripts/sb01_conversation.py enp2s0
 ```
 
 ---

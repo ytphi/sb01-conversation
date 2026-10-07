@@ -97,7 +97,7 @@ Plug an Ethernet cable from your laptop into the G1. Then:
 
 ```bash
 # Ubuntu / WSL2
-python3 scripts/sb01_conversation.py eno0
+python3 scripts/sb01_conversation.py enp2s0
 
 # Mac
 python3 scripts/sb01_conversation.py en0
@@ -186,7 +186,7 @@ pip install face_recognition
 Re-run `bash setup.sh` — the SDK install may have been skipped.
 
 **Robot not responding to speech**
-- Check that `eno0` is the right interface: run `ip link` (Linux) or `ifconfig` (Mac)
+- Check that `enp2s0` is the right interface: run `ip link` (Linux) or `ifconfig` (Mac)
 - Make sure the Ethernet cable is connected and the G1 is powered on
 
 **`ANTHROPIC_API_KEY` error at startup**
