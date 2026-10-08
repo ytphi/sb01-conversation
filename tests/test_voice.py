@@ -12,6 +12,7 @@ Claude or network needed). Same stand-ins as tests/test_language.py otherwise.
 import contextlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -382,18 +383,45 @@ class OneEngineOnTheCard(unittest.TestCase):
         self.assertIn("en is fast, other languages are synthesized on the processor and are slow", voice.device_note)
 
     def test_it_needs_less_memory_than_both_engines_but_is_still_checked(self):
-        for free, expected in ((2.4, "cpu"), (2.5, "cuda"), (6.0, "cuda")):
+        for free, expected in ((3.9, "cpu"), (4.0, "cuda"), (6.0, "cuda")):
             with mock.patch.object(vc, "gpu_free_gb", return_value=free):
                 self.assertEqual(vc.choose_device("cuda", ("nano",))[0], expected, free)
-        for free, expected in ((4.4, "cpu"), (4.5, "cuda")):
+        for free, expected in ((5.4, "cpu"), (5.5, "cuda")):
             with mock.patch.object(vc, "gpu_free_gb", return_value=free):
                 self.assertEqual(vc.choose_device("cuda", ("multilingual",))[0], expected, free)
+
+    def test_the_requirement_is_what_the_engine_uses_plus_room_for_the_gesture_server(self):
+        self.assertEqual(vc.GPU_GB_PER_ENGINE, {"nano": 4.0, "multilingual": 5.5})
+        for name, needed in vc.GPU_GB_PER_ENGINE.items():
+            self.assertGreaterEqual(needed - vc.GPU_GB_USED[name], 1.5)            # what is left once it has loaded
+
+    def test_with_the_gesture_server_already_on_a_6_gb_card(self):
+        with mock.patch.object(vc, "gpu_free_gb", return_value=4.7):                # 6.0 minus the gesture server
+            self.assertEqual(vc.choose_device("cuda", ("nano",))[0], "cuda")
+            self.assertEqual(vc.choose_device("cuda", ("multilingual",))[0], "cpu") # never shares a 6 GB card
+            self.assertEqual(vc.choose_device("cuda")[0], "cpu")
+        with mock.patch.object(vc, "gpu_free_gb", return_value=3.7):                # and another program holding 1 GB
+            device, why = vc.choose_device("cuda", ("nano",))
+        self.assertEqual(device, "cpu")
+        self.assertIn("only 3.7 GB of graphics memory is free and Chatterbox needs about 4.0 GB", why)
+
+    def test_the_requirement_cannot_be_set_below_what_the_engines_use(self):
+        os.environ["SB01_CHATTERBOX_GPU_GB"] = "0.1"
+        for engines, free, expected in ((("nano",), 2.4, "cpu"), (("nano",), 2.5, "cuda"),
+                                        (("multilingual",), 3.9, "cpu"), ((), 5.9, "cpu"), ((), 6.0, "cuda")):
+            with mock.patch.object(vc, "gpu_free_gb", return_value=free):
+                self.assertEqual(vc.choose_device("cuda", engines)[0], expected, (engines, free))
+
+    def test_no_usable_card_means_the_processor(self):
+        voice, config, devices = self._made(free=None)
+        self.assertEqual((voice.device, config["device"], devices), ("cpu", "cpu", {}))
+        self.assertIn("no usable graphics card", voice.device_note)
 
     def test_without_enough_memory_everything_runs_on_the_processor_and_says_so(self):
         voice, config, devices = self._made(free=1.9)
         self.assertEqual((voice.device, config["device"], devices), ("cpu", "cpu", {}))
         self.assertIn("only 1.9 GB of graphics memory is free", voice.device_note)
-        self.assertIn("needs about 2.5 GB", voice.device_note)
+        self.assertIn("needs about 4.0 GB", voice.device_note)
 
     def test_naming_engines_does_nothing_unless_cuda_is_asked_for(self):
         for device in ("", "cpu", "auto"):
@@ -414,6 +442,294 @@ class OneEngineOnTheCard(unittest.TestCase):
             with self.assertRaises(vc.VoiceUnavailable) as raised:
                 vc.ChatterboxVoice()
         self.assertIn("SB01_CHATTERBOX_GPU_ENGINES names 'turbo'; use nano or multilingual", str(raised.exception))
+
+
+class TwoMemoryReadings(unittest.TestCase):
+    """Free graphics memory is the lower of PyTorch's figure and nvidia-smi's."""
+
+    def _free(self, torch_says, smi_says):
+        with mock.patch.object(vc, "_torch_free_gb", return_value=torch_says), \
+                mock.patch.object(vc, "_smi_free_gb", return_value=smi_says):
+            return vc.gpu_free_gb()
+
+    def test_the_lower_reading_counts(self):
+        self.assertEqual(self._free(5.0, 1.3), 1.3)          # as seen under WSL with another program on the card
+        self.assertEqual(self._free(4.6, 4.7), 4.6)
+
+    def test_without_nvidia_smi_pytorch_is_believed(self):
+        self.assertEqual(self._free(5.0, None), 5.0)
+
+    def test_without_a_usable_card_there_is_no_reading(self):
+        self.assertIsNone(self._free(None, 6.0))
+
+    def test_nvidia_smi_is_read_as_total_minus_used(self):
+        answer = types.SimpleNamespace(stdout="6144, 4825\n")
+        with mock.patch.object(vc.subprocess, "run", return_value=answer) as run:
+            self.assertAlmostEqual(vc._smi_free_gb(), (6144 - 4825) / 1024)
+        self.assertEqual(run.call_args.kwargs.get("timeout"), 5)
+
+    def test_a_missing_or_confused_nvidia_smi_gives_no_reading(self):
+        with mock.patch.object(vc.subprocess, "run", side_effect=FileNotFoundError("nvidia-smi")):
+            self.assertIsNone(vc._smi_free_gb())
+        with mock.patch.object(vc.subprocess, "run", return_value=types.SimpleNamespace(stdout="No devices were found\n")):
+            self.assertIsNone(vc._smi_free_gb())
+
+    def test_a_full_card_seen_only_by_nvidia_smi_keeps_chatterbox_off_it(self):
+        with mock.patch.object(vc, "_torch_free_gb", return_value=5.0), mock.patch.object(vc, "_smi_free_gb", return_value=1.3):
+            device, why = vc.choose_device("cuda", ("nano",))
+        self.assertEqual(device, "cpu")
+        self.assertIn("only 1.3 GB", why)
+
+
+class _Wave:
+    """What a Chatterbox model returns, as far as the speech framework uses it."""
+
+    def __init__(self, samples):
+        self.samples = samples
+
+    def squeeze(self, _):
+        return self
+
+    detach = cpu = lambda self: self
+
+    def numpy(self):
+        return self.samples
+
+
+@contextlib.contextmanager
+def _real_framework(tts_config):
+    """The speech framework's own speech_synth.py, tts_common.py and both engine
+    files, unchanged; only its settings reader (needs PyYAML) and the Chatterbox
+    package itself are stand-ins. Yields every (engine, device, text, language)
+    the stand-in models were asked to speak."""
+    names = ("_paths", "settings", "speech_synth", "tts_common", "chatterbox_nano", "chatterbox_ml3")
+    saved = {name: sys.modules.pop(name, None) for name in names}
+    spoken = []
+
+    def model_class(engine):
+        class Model:
+            sr, conds = RATE, object()
+
+            def __init__(self, device):
+                self.device = device
+
+            @classmethod
+            def from_pretrained(cls, device, **kwargs):
+                return cls(device)
+
+            def generate(self, text, language_id=None, **params):
+                spoken.append((engine, self.device, text, language_id))
+                return _Wave(0.5 * np.sin(np.arange(RATE) * 0.05, dtype=np.float32))
+        return Model
+
+    fakes = {name: types.ModuleType(name) for name in ("settings", "chatterbox", "chatterbox.tts_turbo", "chatterbox.mtl_tts")}
+    fakes["settings"].load_settings = lambda: {"tts": tts_config}
+    fakes["settings"].resolve_path = lambda path: path or None
+    fakes["chatterbox.tts_turbo"].ChatterboxTurboTTS = model_class("nano")
+    fakes["chatterbox.mtl_tts"].ChatterboxMultilingualTTS = model_class("multilingual")
+    path_before = list(sys.path)
+    try:
+        with mock.patch.dict(sys.modules, fakes), contextlib.redirect_stdout(io.StringIO()):
+            yield spoken
+    finally:
+        sys.path[:] = path_before
+        for name in names:
+            sys.modules.pop(name, None)
+        for name, module in saved.items():
+            if module is not None:
+                sys.modules[name] = module
+
+
+# The languages as experimental/speech-framework/config.yaml ships them.
+SHIPPED_LANGUAGES = {"en": {"engine": "nano", "voice": None},
+                     "zh": {"engine": "multilingual", "voice": None, "exaggeration": 0.5, "cfg_weight": 0.5},
+                     "ja": {"engine": "multilingual", "voice": None, "exaggeration": 0.5, "cfg_weight": 0.5},
+                     "es": {"engine": "multilingual", "voice": None, "exaggeration": 0.5, "cfg_weight": 0.5}}
+SHIPPED = {"device": "auto", "preload": True, "multilingual_t3_model": "v3", "languages": SHIPPED_LANGUAGES}
+REPLIES = {"en": "Hello there, it is nice to meet you.", "es": "¡Hola! ¿Cómo estás hoy?", "zh": "你好，今天怎么样？"}
+
+
+class WhichEngineSpeaksWhichLanguage(unittest.TestCase):
+    """English: the nano engine. Spanish and Chinese: the multilingual engine, on the processor."""
+
+    setUp, tearDown = WhereChatterboxRuns.setUp, WhereChatterboxRuns.tearDown
+
+    def _voice(self, free=None, **settings):
+        os.environ.update(settings)
+        with mock.patch.object(vc, "gpu_free_gb", return_value=free):
+            voice = vc.ChatterboxVoice()
+        voice._to_pcm16 = _to_pcm16                 # the framework's own resampler needs PyTorch
+        voice.load()
+        return voice
+
+    def test_the_settings_file_ships_this_routing(self):
+        with open(os.path.join(vc.FRAMEWORK_DIR, "config.yaml"), encoding="utf-8") as settings:
+            text = settings.read()
+        found = dict(re.findall(r"^    (\w+): \{ engine: (\w+),", text, flags=re.MULTILINE))
+        self.assertEqual(found, {language: entry["engine"] for language, entry in SHIPPED_LANGUAGES.items()})
+
+    def test_by_default_every_engine_is_on_the_processor(self):
+        with _real_framework(dict(SHIPPED)) as spoken:
+            voice = self._voice(free=24.0)
+            for language, text in REPLIES.items():
+                voice.synthesize(text, language)
+        self.assertEqual(spoken, [("nano", "cpu", REPLIES["en"], None),
+                                  ("multilingual", "cpu", REPLIES["es"], "es"),
+                                  ("multilingual", "cpu", REPLIES["zh"], "zh")])
+
+    def test_with_nano_on_the_card_only_english_uses_it(self):
+        with _real_framework(dict(SHIPPED)) as spoken:
+            voice = self._voice(free=4.7, SB01_CHATTERBOX_DEVICE="cuda", SB01_CHATTERBOX_GPU_ENGINES="nano")
+            loaded = {name: engine.model.device for name, engine in voice._synth._engines.items()}
+            for language in ("en", "es", "zh", "ja", "en"):
+                voice.synthesize(REPLIES.get(language, "こんにちは、元気ですか。"), language)
+        self.assertEqual(loaded, {"nano": "cuda", "multilingual": "cpu"})
+        self.assertEqual([(engine, device, language) for engine, device, _, language in spoken],
+                         [("nano", "cuda", None), ("multilingual", "cpu", "es"), ("multilingual", "cpu", "zh"),
+                          ("multilingual", "cpu", "ja"), ("nano", "cuda", None)])
+        self.assertIn("en is fast", voice.device_note)
+
+    def test_without_enough_memory_english_is_on_the_processor_too(self):
+        with _real_framework(dict(SHIPPED)) as spoken:
+            voice = self._voice(free=3.0, SB01_CHATTERBOX_DEVICE="cuda", SB01_CHATTERBOX_GPU_ENGINES="nano")
+            voice.synthesize(REPLIES["en"], "en")
+        self.assertEqual(spoken, [("nano", "cpu", REPLIES["en"], None)])
+        self.assertIn("so it runs on the processor", voice.device_note)
+
+    def test_a_language_with_no_setting_of_its_own_never_gets_the_english_engine(self):
+        with _real_framework(dict(SHIPPED)) as spoken:
+            voice = self._voice(free=4.7, SB01_CHATTERBOX_DEVICE="cuda", SB01_CHATTERBOX_GPU_ENGINES="nano")
+            voice.synthesize("Bonjour, comment allez-vous ?", "fr")
+        self.assertEqual([(engine, device, language) for engine, device, _, language in spoken], [("multilingual", "cpu", "fr")])
+
+    def test_the_program_sends_each_reply_to_the_engine_for_its_language(self):
+        with _real_framework(dict(SHIPPED)) as spoken:
+            loop, robot = _loop(engine=False)
+            loop.voice = self._voice(free=4.7, SB01_CHATTERBOX_DEVICE="cuda", SB01_CHATTERBOX_GPU_ENGINES="nano")
+            base.tts_calls.clear()
+            _speak(loop, REPLIES["en"], "en")
+            _speak(loop, REPLIES["es"], "es")
+            _speak(loop, "Muy bien, ahora mira el diagrama.", "es")        # Spanish with no accented letter
+            _speak(loop, REPLIES["zh"], "zh")
+        self.assertEqual([(engine, device, language) for engine, device, _, language in spoken],
+                         [("nano", "cuda", None), ("multilingual", "cpu", "es"), ("multilingual", "cpu", "es"),
+                          ("multilingual", "cpu", "zh")])
+        self.assertEqual(base.tts_calls, [])                                # Edge TTS was not needed
+        self.assertEqual(robot.events.count("audio"), 4)
+
+    def test_edge_tts_takes_over_in_every_language(self):
+        expected = {"en": script.VOICE_EN, "es": script.VOICE_ES, "zh": script.VOICE_ZH}
+        for language, text in REPLIES.items():
+            with self.subTest(language=language):
+                engine = _Engine()
+                loop, robot = _loop(engine)
+                engine.fail = RuntimeError("CUDA out of memory")
+                base.tts_calls.clear()
+                printed = _speak(loop, text, language)
+                self.assertIn("using Edge TTS for it", printed)
+                self.assertEqual([voice for voice, _ in base.tts_calls], [expected[language]])
+                self.assertEqual(b"".join(robot.played), base._Segment.raw_data)       # the whole reply, once
+                self.assertEqual(robot.events, ["gesture-start", "gesture-begin", "audio"])
+
+
+class NoMemoryKeptPerReply(unittest.TestCase):
+    """Every sentence is synthesized with gradient bookkeeping off (it otherwise keeps memory for good)."""
+
+    def test_each_sentence_is_synthesized_inside_it_and_nothing_else_is(self):
+        engine = _Engine()
+        inside, seen = [], []
+
+        @contextlib.contextmanager
+        def off():
+            inside.append(True)
+            try:
+                yield
+            finally:
+                inside.pop()
+
+        real = engine.synthesize
+        engine.synthesize = lambda text, language: seen.append(bool(inside)) or real(text, language)
+        with mock.patch.object(vc.ChatterboxVoice, "_no_gradients", staticmethod(off)):
+            _voice(engine).synthesize("First sentence of the reply. Second sentence of the reply.", "en", split=True)
+        self.assertEqual(seen, [True, True])
+        self.assertEqual(inside, [])
+
+    def test_a_failure_inside_it_still_reaches_edge_tts(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        engine.fail = RuntimeError("CUDA out of memory")
+        base.tts_calls.clear()
+        _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertEqual(len(base.tts_calls), 1)
+
+    def test_it_works_where_pytorch_is_not_installed(self):
+        with mock.patch.dict(sys.modules, {"torch": None}):
+            with vc.ChatterboxVoice._no_gradients():
+                pass
+
+
+class SpeechLevel(unittest.TestCase):
+    """A quiet reply is turned up toward Edge TTS's level by one factor, and can never clip."""
+
+    @staticmethod
+    def _tone(amplitude, seconds=1.0):
+        return (amplitude * np.sin(np.arange(round(seconds * RATE)) * 0.05)).astype(np.float32)
+
+    def test_a_quiet_reply_is_brought_to_the_level_of_edge_tts(self):
+        quiet = self._tone(0.09)
+        loud = vc.ChatterboxVoice._levelled(quiet)
+        self.assertAlmostEqual(vc.ChatterboxVoice._speech_level(loud), vc.SPEECH_LEVEL, places=3)
+        self.assertLess(float(np.abs(loud).max()), vc.PEAK_CEILING)
+
+    def test_it_is_one_factor_for_the_whole_reply_so_only_the_loudness_changes(self):
+        quiet = np.concatenate((self._tone(0.09), np.zeros(RATE // 4, dtype=np.float32), self._tone(0.05)))
+        loud = vc.ChatterboxVoice._levelled(quiet)
+        moving = np.abs(quiet) > 1e-3
+        factors = loud[moving] / quiet[moving]
+        self.assertAlmostEqual(float(factors.min()), float(factors.max()), places=4)
+        self.assertEqual(len(loud), len(quiet))
+
+    def test_a_loud_moment_limits_how_far_it_is_turned_up(self):
+        quiet = self._tone(0.04)
+        quiet[1000:1100] = 0.6                               # one loud consonant
+        loud = vc.ChatterboxVoice._levelled(quiet)
+        self.assertAlmostEqual(float(np.abs(loud).max()), vc.PEAK_CEILING, places=4)
+        self.assertLess(vc.ChatterboxVoice._speech_level(loud), vc.SPEECH_LEVEL)
+
+    def test_it_is_never_more_than_doubled(self):
+        faint = self._tone(0.01)
+        self.assertAlmostEqual(float(np.abs(vc.ChatterboxVoice._levelled(faint)).max()), 0.02, places=4)
+
+    def test_speech_that_is_loud_enough_is_not_touched(self):
+        loud = self._tone(0.5)
+        self.assertIs(vc.ChatterboxVoice._levelled(loud), loud)
+
+    def test_what_the_robot_and_the_gesture_model_get_is_turned_up_alike_and_does_not_clip(self):
+        engine = _Engine()
+        engine.bad = (self._tone(0.09, 2.0), RATE)
+        speech = _voice(engine).synthesize("A quiet reply for you.", "en")
+        robot = np.frombuffer(speech.pcm, dtype="<i2")
+        gesture = np.frombuffer(speech.gesture_pcm, dtype="<i2")
+        self.assertLess(int(np.abs(robot).max()), 32767 * vc.PEAK_CEILING + 1)
+        self.assertAlmostEqual(int(np.abs(robot).max()), int(np.abs(gesture).max()), delta=40)
+        self.assertGreater(int(np.abs(robot).max()), 32767 * 0.09 * 1.5)                # it was turned up
+        self.assertAlmostEqual(len(robot) / 16000, 2.0, places=2)                       # same length, same format
+        self.assertEqual(len(speech.pcm) % 2, 0)
+
+    def test_sentences_joined_together_keep_their_own_balance(self):
+        engine = _Engine()
+        real = engine.synthesize
+
+        def quiet(text, language):                           # the first sentence twice as loud as the second
+            wave, rate = real(text, language)
+            return wave * (0.2 if text.startswith("First") else 0.1), rate
+
+        engine.synthesize = quiet
+        speech = _voice(engine).synthesize("First sentence of the reply. Second sentence of the reply.", "en", split=True)
+        samples = np.abs(np.frombuffer(speech.gesture_pcm, dtype="<i2").astype(np.float32))
+        half = len(samples) // 2
+        self.assertAlmostEqual(float(samples[:half].max() / samples[half:].max()), 2.0, places=1)
+        self.assertGreater(float(samples.max()), 32767 * 0.1 * 1.5)                     # and the reply was turned up
 
 
 class VoiceSettings(unittest.TestCase):

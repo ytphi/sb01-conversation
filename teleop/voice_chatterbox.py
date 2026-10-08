@@ -40,13 +40,22 @@ Settings:
   SB01_CHATTERBOX_DEVICE        cpu (default) | cuda   overrides tts.device in config.yaml
   SB01_CHATTERBOX_GPU_ENGINES   with cuda: which engines use the card (default: all), e.g. nano
   SB01_CHATTERBOX_GPU_GB        free graphics memory required before cuda is used
-                                (default 7 for both engines, 2.5 for nano, 4.5 for multilingual)
+                                (default 7 for both engines, 4 for nano, 5.5 for multilingual;
+                                it cannot be set below what the engines were measured to use)
+
+Loudness. Chatterbox speaks a few dB quieter than Edge TTS and the robot's
+volume is already at its highest, so a whole reply is turned up by one fixed
+factor toward Edge TTS's speech level: never past 1 dB below full scale, never
+more than twice. One factor for the whole reply changes how loud it is and
+nothing else.
 """
 
+import contextlib
 import gc
 import importlib
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 
@@ -62,9 +71,22 @@ MIN_SECONDS = 0.15          # shorter than this is not speech
 MAX_SECONDS = 60.0          # longer than this for one reply is a runaway generation
 GPU_FREE_GB_NEEDED = 7.0    # both engines measured at about 5.7 GB, plus room to work
 ENGINES = ("nano", "multilingual")
-# One engine alone, measured at its peak (weights + a long reply), plus room to work:
-# nano 2.3 GB, multilingual 3.6 GB.
-GPU_GB_PER_ENGINE = {"nano": 2.5, "multilingual": 4.5}
+# One engine alone on the card. Measured at its peak (weights, a long reply and
+# the CUDA runtime): nano 2.5 GB, multilingual 4.0 GB, both 6.0 GB. Required
+# free before loading: that plus 1.5 GB, which is the gesture server (1.3 GB)
+# starting afterwards, or the same room for anything else. On a 6 GB card with
+# the gesture server already running (4.7 GB free) nano is allowed and leaves
+# about 2.6 GB; multilingual is not.
+GPU_GB_USED = {"nano": 2.5, "multilingual": 4.0}
+GPU_GB_USED_BY_ALL = 6.0
+GPU_GB_RESERVE = 1.5
+GPU_GB_PER_ENGINE = {name: used + GPU_GB_RESERVE for name, used in GPU_GB_USED.items()}
+
+# Loudness: speech from Edge TTS measures about -19 dBFS (see _speech_level);
+# Chatterbox comes out 3 to 5 dB below that.
+SPEECH_LEVEL = 0.112        # -19 dBFS
+PEAK_CEILING = 0.89         # -1 dBFS: the loudest sample after turning up
+MAX_GAIN = 2.0              # +6 dB at most
 
 # Sentences synthesized one by one are joined with a pause. Each piece keeps at
 # most this much of its own silence and is faded at both ends, so a join can
@@ -128,8 +150,7 @@ def _reason(exc: Exception) -> str:
     return f"{name}: {text}"
 
 
-def gpu_free_gb() -> float | None:
-    """Free graphics memory in GB, or None if there is no usable CUDA card."""
+def _torch_free_gb() -> float | None:
     try:
         import torch
         if not torch.cuda.is_available():
@@ -137,6 +158,29 @@ def gpu_free_gb() -> float | None:
         return torch.cuda.mem_get_info()[0] / 2 ** 30
     except Exception:
         return None
+
+
+def _smi_free_gb() -> float | None:
+    """Free memory of the first card as the driver's own tool counts it (every
+    program included), or None if the tool is not there."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=5).stdout
+        total, used = (float(value) for value in out.strip().splitlines()[0].split(","))
+        return max(0.0, total - used) / 1024
+    except Exception:
+        return None
+
+
+def gpu_free_gb() -> float | None:
+    """Free graphics memory in GB, or None if there is no usable CUDA card.
+    The lower of two readings: under Windows/WSL PyTorch's figure was seen not
+    to count what other programs hold, while nvidia-smi's does."""
+    free = _torch_free_gb()
+    if free is None:
+        return None
+    other = _smi_free_gb()
+    return free if other is None else min(free, other)
 
 
 def gpu_engines() -> tuple:
@@ -162,10 +206,12 @@ def choose_device(asked: str | None, engines: tuple = ()) -> tuple[str, str]:
     if not asked.startswith("cuda"):
         raise VoiceUnavailable(f"SB01_CHATTERBOX_DEVICE / tts.device is {asked!r}; use cpu or cuda")
     usual = sum(GPU_GB_PER_ENGINE[name] for name in engines) if engines else GPU_FREE_GB_NEEDED
+    least = sum(GPU_GB_USED[name] for name in engines) if engines else GPU_GB_USED_BY_ALL
     try:
         needed = float(os.environ.get("SB01_CHATTERBOX_GPU_GB", "") or usual)
     except ValueError:
         needed = usual
+    needed = max(needed, least)      # never less than the engines themselves take
     free = gpu_free_gb()
     if free is None:
         return "cpu", "cuda was asked for but no usable graphics card was found, so it runs on the processor"
@@ -290,7 +336,8 @@ class ChatterboxVoice:
         waves, rate, words, clock = [], None, [], 0.0
         try:
             for piece in pieces:
-                wave, piece_rate = self._synth.synthesize(piece, language)
+                with self._no_gradients():
+                    wave, piece_rate = self._synth.synthesize(piece, language)
                 wave = self._checked(wave, piece_rate)
                 if rate is None:
                     rate = piece_rate
@@ -309,6 +356,7 @@ class ChatterboxVoice:
             seconds = len(whole) / rate
             if not MIN_SECONDS <= seconds <= MAX_SECONDS:
                 raise VoiceUnavailable(f"the audio came out {seconds:.1f} s long, which cannot be right")
+            whole = self._levelled(whole)
             pcm = self._to_pcm16(whole, rate, PLAYBACK_RATE)
             gesture_pcm = self._to_pcm16(whole, rate, GESTURE_RATE) if gesture_audio else None
         except VoiceUnavailable:
@@ -321,6 +369,18 @@ class ChatterboxVoice:
         if not pcm or len(pcm) % 2:
             raise VoiceUnavailable("the audio could not be converted for the robot's speaker")
         return Speech(pcm, gesture_pcm, seconds, words, len(pieces))
+
+    @staticmethod
+    def _no_gradients():
+        """Synthesis with PyTorch's gradient bookkeeping off. The audio is the
+        same sample for sample; without this the English engine's watermarking
+        step kept about 5 MB of ordinary memory with every sentence, for good.
+        Where PyTorch is not installed (the offline tests) this does nothing."""
+        try:
+            import torch
+            return torch.inference_mode()
+        except Exception:
+            return contextlib.nullcontext()
 
     @staticmethod
     def _checked(wave, rate) -> np.ndarray:
@@ -338,6 +398,20 @@ class ChatterboxVoice:
         if float(np.abs(wave).max()) < 1e-4:
             raise VoiceUnavailable("the voice returned silence")
         return wave
+
+    @staticmethod
+    def _speech_level(wave: np.ndarray) -> float:
+        """How loud the speech is: RMS of the samples that are not silence."""
+        spoken = wave[np.abs(wave) >= QUIET * float(np.abs(wave).max())]
+        return float(np.sqrt(np.mean(np.square(spoken, dtype=np.float64))))
+
+    @classmethod
+    def _levelled(cls, wave: np.ndarray) -> np.ndarray:
+        """The whole reply turned up by one factor toward Edge TTS's speech
+        level. Never turned down, never past the peak ceiling, never more than
+        MAX_GAIN; if it is already loud enough it is returned untouched."""
+        gain = min(SPEECH_LEVEL / cls._speech_level(wave), PEAK_CEILING / float(np.abs(wave).max()), MAX_GAIN)
+        return wave if gain <= 1.0 else wave * np.float32(gain)
 
     @staticmethod
     def _spoken_span(wave: np.ndarray) -> tuple[int, int]:

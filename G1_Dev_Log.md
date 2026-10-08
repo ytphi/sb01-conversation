@@ -205,7 +205,7 @@ and no reliable gain. On the processor there is nothing left to take out.
 long reply), the nano engine needs 2.3 GB and the multilingual engine 3.6 GB. Nano therefore fits beside
 the gesture server (1.3 GB) on a 6 GB card with room to spare, which both engines together do not.
 `SB01_CHATTERBOX_DEVICE=cuda` with `SB01_CHATTERBOX_GPU_ENGINES=nano` puts only that engine on the card,
-if 2.5 GB is free (4.5 GB for `multilingual`); every other engine is made for the processor. Without
+if 4 GB is free (5.5 GB for `multilingual`); every other engine is made for the processor. Without
 `SB01_CHATTERBOX_GPU_ENGINES` nothing changes: the processor is still the default and cuda for both
 engines still needs 7 GB. The audio comes from the same model with the same settings.
 
@@ -220,10 +220,71 @@ stand-in robot, teaching gestures on:
 - Audio checks, 10 of 10: 16 kHz one channel 16-bit, 4.9 dB below Edge TTS, pauses between sentences
   0.37 to 0.38 s, no clicks, a recognizer heard all 47 words once.
 - Spanish and Chinese still use the multilingual engine on the processor (15 s for a 2 s sentence).
-That is one machine and one sitting, 25 replies: enough to say it worked there, not that it is proven for a
-long session. The multilingual engine on the card beside the gesture server was not tested; by the
-measurements it would leave under 1 GB free. Both engines on a card still need clearly more than 8 GB, or
-the gesture server on another machine.
+The multilingual engine on the card beside the gesture server was not tested and is now refused on a
+6 GB card (see below). Both engines on a card still need clearly more than 8 GB, or the gesture server on
+another machine.
+
+**Memory headroom (raised after review).** The requirement is what an engine uses plus 1.5 GB kept free:
+
+| On the card | Uses at its peak (weights, a long reply, CUDA runtime) | Free memory required |
+|---|---|---|
+| nano (English) | 2.5 GB (the card went from 1.3 to 3.4 GB with the gesture server already on it) | 4.0 GB |
+| multilingual | 4.0 GB | 5.5 GB |
+| both | 6.0 GB | 7.0 GB |
+
+The 1.5 GB is the gesture server (1.3 GB) in case it starts after the voice, or the same room for anything
+else. On the 6 GB laptop card with the gesture server running, 4.6 GB is free: nano is allowed and 2.6 GB
+is still free once it has loaded; multilingual and "both" are refused, so the multilingual engine never
+shares that card. `SB01_CHATTERBOX_GPU_GB` can raise the requirement, and can lower it only as far as what
+the engines use. Free memory is now the lower of two readings, PyTorch's and `nvidia-smi`'s: under
+Windows/WSL PyTorch reported 5.0 GB free whatever other programs held, while `nvidia-smi` counted them.
+Checked on the laptop with nothing loaded: empty card, nano allowed; another program holding 4.8 GB,
+"only 1.2 GB of graphics memory is free and Chatterbox needs about 4.0 GB, so it runs on the processor";
+gesture server on the card, nano allowed, multilingual and both refused; no setting, processor.
+A real out-of-memory error still could not be produced on this laptop; that handling is covered by tests
+with a stand-in engine.
+
+**Which engine speaks which language.** English uses the nano engine; Spanish, Chinese and Japanese use
+the multilingual engine (as `config.yaml` ships). Checked with the real models with nano on the card:
+English on `cuda:0`, Spanish and Chinese on the processor with the language passed to the model. A language
+with no setting of its own goes to the multilingual engine, not to the English one (the speech framework's
+own rule). The language of a reply is decided as before, by the same rule that picks the Edge TTS voice.
+
+**Loudness (added).** Through the same conversion the robot's audio goes through, on eight English
+sentences, Chatterbox's speech level was 5.0 dB below Edge TTS on average (2.7 to 6.9 dB), which is a
+plainly audible difference, and the robot's volume is already set to 100. Each reply is now multiplied by
+one factor toward Edge TTS's level (-19 dBFS), limited so the loudest sample stays 1 dB below full scale and
+the factor never exceeds 2 (+6 dB); a reply that is already loud enough is left alone. After: 0.8 dB below
+Edge TTS on average (0.1 to 1.5 dB), and replies differ less from each other (0.3 dB instead of 1.4 dB).
+No sample at full scale, highest peak -1.0 dBFS; the audio is the earlier audio times one number (to within
+rounding), same length and format; a recognizer heard 113 of 113 words. Four-sentence reply, 10 of 10
+audio checks: pauses between sentences 0.37 s, no clicks, 47 of 47 words heard once. The gesture model gets
+the same turned-up audio. Edge TTS audio is unchanged. How it sounds from the G1's own speaker was not
+tested.
+
+**Longer run.** 50 English replies in a row (3 to 7 s long, teaching gestures on) with the nano engine on the
+card, the real gesture server on the same card, the real gesture client and a stand-in robot (no DDS):
+- all 50 in the Chatterbox voice, each synthesized once and played once, exactly the audio that was
+  synthesized; Edge TTS never used; fallback counter 0; no reply started before the one before it had ended;
+- 50 gestures made, arms released after each, every step within 0.05 rad/frame, no error in the gesture
+  server's log; a recognizer heard 13 of 13 words in each of the 10 replies sampled;
+- first audio 1.6 to 4.7 s after the reply was ready, typically 2.3 s, and no slower at the end than at the
+  start (0.52 s of waiting per second of speech in the first ten replies, 0.50 in the last ten);
+- graphics memory, whole card: 3.36 GB after the first reply, 3.50 GB from the tenth, 3.57 GB at the
+  fiftieth. It rose in two small steps and did not fall; 2.5 GB of the 6 GB stayed free throughout;
+- ordinary memory: gesture server level at about 0.22 GB; voice program 5.84 GB after the first reply and
+  5.96 GB after the fiftieth (see the next paragraph).
+This is one laptop, one sitting, a stand-in robot. It says nothing about other hardware or about hours of use.
+
+**Memory kept with every reply (found by the longer run, fixed).** In the first 50-reply run the voice
+program's ordinary memory rose by about 280 MB. Followed over 250 replies with nothing else running, it rose
+by 1.7 GB, about 7 MB per reply, until the machine's memory was nearly used up. The cause is in the
+Chatterbox package: the English engine's watermarking step keeps about 5 MB with every sentence when
+PyTorch's gradient bookkeeping is on, and the package leaves it on for that engine. The conversation program
+now synthesizes with it off (`torch.inference_mode()`), which gives the same audio sample for sample. After
+the change, 250 replies added 0.22 GB, most of it in the first 50, and 1 MB over the last 25. Speed and
+graphics memory did not change. The speech framework's own program (`run_robot.py`) calls the engine without
+this and was not changed; it should be expected to grow the same way in long sessions.
 
 Limits of what was checked:
 - The free-memory check could only be exercised here as "a 6 GB card is refused". Under Windows/WSL the
