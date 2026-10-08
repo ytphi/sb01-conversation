@@ -42,3 +42,6 @@ record/
 # Editor / OS
 .DS_Store
 *.swp
+
+# stage_demo.py run logs
+logs/

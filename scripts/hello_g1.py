@@ -12,6 +12,7 @@ moves the arm; this script deliberately does not.)
 Usage:
   python3 scripts/hello_g1.py <network_interface> [--seconds N]   # on the robot, e.g. eno0
   python3 scripts/hello_g1.py --fake [--seconds N]                # offline, no robot
+  python3 scripts/hello_g1.py --sim [--seconds N]                 # MuJoCo simulator (domain 1, lo)
 """
 
 import sys
@@ -34,6 +35,8 @@ LED_SEQUENCE   = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
 LED_STEP_SEC   = 1.0
 WATCH_JOINTS   = {15: "L-shoulder-pitch", 22: "R-shoulder-pitch"}  # arm7 layout
 FAKE_RATE_HZ   = 50   # the real robot publishes lowstate much faster (~500 Hz)
+SIM_DOMAIN     = 1    # unitree_mujoco's domain; the real robot uses 0
+SIM_INTERFACE  = "lo"
 
 
 # ── fakes for --fake mode ────────────────────────────────────────────────────
@@ -159,10 +162,12 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description="G1 hello test: speak, LED, read-only lowstate.")
     p.add_argument("interface", nargs="?", help="network interface wired to the G1, e.g. eno0")
     p.add_argument("--fake", action="store_true", help="offline mode, no robot connection")
+    p.add_argument("--sim", action="store_true",
+                   help="read lowstate from the MuJoCo simulator (domain 1, lo); audio and LED are printed")
     p.add_argument("--seconds", type=float, default=5.0, help="how long to read lowstate (default 5)")
     args = p.parse_args(argv)
-    if args.fake == bool(args.interface):
-        p.error("give either a network interface or --fake (not both)")
+    if [bool(args.interface), args.fake, args.sim].count(True) != 1:
+        p.error("give exactly one of: a network interface, --fake, --sim")
     if args.seconds <= 0:
         p.error("--seconds must be positive")
     return args
@@ -176,6 +181,10 @@ def main(argv=None):
     if args.fake:
         print("=== hello_g1 (FAKE mode: no robot connection) ===")
         audio = FakeAudioClient()
+    elif args.sim:
+        print(f"=== hello_g1 (SIM mode: domain {SIM_DOMAIN} on {SIM_INTERFACE}, no robot) ===")
+        ChannelFactoryInitialize(SIM_DOMAIN, SIM_INTERFACE)
+        audio = FakeAudioClient()   # the simulator has no audio or LED service
     else:
         print(f"=== hello_g1 on interface {args.interface} ===")
         ChannelFactoryInitialize(0, args.interface)
@@ -203,7 +212,8 @@ def main(argv=None):
             feed.stop()
 
     if count == 0:
-        print(f"WARNING: no {LOWSTATE_TOPIC} received; check the Ethernet cable and interface name.")
+        hint = "is the simulator running?" if args.sim else "check the Ethernet cable and interface name."
+        print(f"WARNING: no {LOWSTATE_TOPIC} received; {hint}")
         return 1
     print(f"Done: {count} lowstate messages in {args.seconds:g}s.")
     return 0
