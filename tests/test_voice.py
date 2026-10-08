@@ -716,6 +716,32 @@ class SpeechLevel(unittest.TestCase):
         self.assertAlmostEqual(len(robot) / 16000, 2.0, places=2)                       # same length, same format
         self.assertEqual(len(speech.pcm) % 2, 0)
 
+    def test_the_ceiling_holds_in_the_audio_the_robot_plays_even_if_converting_raises_a_peak(self):
+        def overshooting(wave, rate, target):               # a converter whose output peaks 8% higher
+            return _to_pcm16(np.clip(wave * 1.08, -1, 1), rate, target)
+
+        engine = _Engine()
+        engine.bad = (self._tone(0.09, 2.0), RATE)
+        speech = vc.ChatterboxVoice(synth=engine, to_pcm16=overshooting).synthesize("A quiet reply for you.", "en")
+        peak = int(np.abs(np.frombuffer(speech.pcm, dtype="<i2")).max())
+        self.assertLessEqual(peak, round(32767 * vc.PEAK_CEILING) + 1)
+        self.assertGreater(peak, 32767 * 0.09 * 1.08 * 1.5)                              # still turned up
+
+    def test_speech_already_at_the_reference_level_is_passed_through_bit_for_bit(self):
+        engine = _Engine()                                   # its tone is louder than the reference
+        wave, rate = engine.synthesize("A reply that is loud enough.", "en")
+        speech = _voice(engine).synthesize("A reply that is loud enough.", "en")
+        self.assertEqual(speech.gesture_pcm, _to_pcm16(wave, rate, 24000))
+        self.assertEqual(speech.pcm, _to_pcm16(wave, rate, 16000))
+
+    def test_edge_tts_audio_never_passes_through_the_gain(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        engine.fail = RuntimeError("boom")
+        with mock.patch.object(vc.ChatterboxVoice, "_levelled", side_effect=AssertionError("Edge TTS audio must not be scaled")):
+            _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
+
     def test_sentences_joined_together_keep_their_own_balance(self):
         engine = _Engine()
         real = engine.synthesize

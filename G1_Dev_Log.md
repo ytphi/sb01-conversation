@@ -198,8 +198,8 @@ all in Spanish and Chinese. No safe software change was found that makes it fast
 - a warm-up synthesis at startup was tried and dropped: it saved about 1 s on the first reply and added
   12 s to startup.
 Inside the models the time is half speech tokens (T3) and half tokens-to-sound (S3Gen); the watermark costs
-nothing measurable. Switching gradients off or flushing tiny numbers gave the same audio sample for sample
-and no reliable gain. On the processor there is nothing left to take out.
+nothing measurable. Switching gradients off or flushing tiny numbers gave the same generated waveform sample
+for sample (measured before any gain adjustment existed) and no reliable gain in speed. On the processor there is nothing left to take out.
 
 **English engine on the card (added, opt-in).** Measured alone on the card at their peak (weights plus a
 long reply), the nano engine needs 2.3 GB and the multilingual engine 3.6 GB. Nano therefore fits beside
@@ -250,17 +250,50 @@ English on `cuda:0`, Spanish and Chinese on the processor with the language pass
 with no setting of its own goes to the multilingual engine, not to the English one (the speech framework's
 own rule). The language of a reply is decided as before, by the same rule that picks the Edge TTS voice.
 
-**Loudness (added).** Through the same conversion the robot's audio goes through, on eight English
-sentences, Chatterbox's speech level was 5.0 dB below Edge TTS on average (2.7 to 6.9 dB), which is a
-plainly audible difference, and the robot's volume is already set to 100. Each reply is now multiplied by
-one factor toward Edge TTS's level (-19 dBFS), limited so the loudest sample stays 1 dB below full scale and
-the factor never exceeds 2 (+6 dB); a reply that is already loud enough is left alone. After: 0.8 dB below
-Edge TTS on average (0.1 to 1.5 dB), and replies differ less from each other (0.3 dB instead of 1.4 dB).
-No sample at full scale, highest peak -1.0 dBFS; the audio is the earlier audio times one number (to within
-rounding), same length and format; a recognizer heard 113 of 113 words. Four-sentence reply, 10 of 10
-audio checks: pauses between sentences 0.37 s, no clicks, 47 of 47 words heard once. The gesture model gets
-the same turned-up audio. Edge TTS audio is unchanged. How it sounds from the G1's own speaker was not
-tested.
+**Volume matched to Edge TTS (added on purpose; this changes amplitude).** The reference is Edge TTS as the
+robot plays it today: that volume on the G1 has already been confirmed as appropriate. Chatterbox was
+measured against that reference, through the same conversion the robot's audio goes through (16 kHz, one
+channel, 16-bit). The G1's speaker itself was not retested during this local validation, and no physical G1
+validation has occurred in this branch.
+
+Measured on ten English sentences (same text for both voices; Chatterbox "as generated" and "after the
+gain" made with the same random seed, so the gain is the only difference between them):
+
+| Speech level | Edge TTS (reference) | Chatterbox as generated | Chatterbox after the gain |
+|---|---|---|---|
+| Average | -18.4 dBFS | -24.1 dBFS | -19.5 dBFS |
+| Against Edge TTS | | 5.6 dB quieter (2.6 to 7.7) | 1.0 dB quieter (0.2 to 2.2) |
+
+A difference of 5 to 6 dB is plainly audible and the robot's volume is already set to 100, so each
+Chatterbox reply is multiplied by one number toward Edge TTS's speech level (-19 dBFS): never by more than 2
+(+6 dB), never by less than 1, and limited so that the loudest sample of the audio the robot plays stays
+1 dB below full scale. A reply that is already loud enough is passed through untouched.
+
+What the measurements show for that step:
+- No clipping: no sample at full scale in any reply; highest peak after the gain -1.01 dBFS. (The ceiling
+  is now applied to the converted 16 kHz audio the robot plays: converting had raised one peak to
+  -0.94 dBFS when the ceiling was applied only before conversion.)
+- Amplitude only: each reply after the gain is the generated reply times one number, to within 3.3 of
+  32768 steps (rounding to 16 bits twice); waveform match 1.0000000.
+- Timing unchanged: same length, the same pauses in the same places, the same word-time estimates.
+- Tone unchanged, no distortion added: the share of energy above 2 kHz is the same before and after.
+- Still intelligible: a speech recognizer heard 139 of 139 words.
+- Format unchanged: 16 kHz, one channel, 16-bit for the robot; the 24 kHz copy for the gesture model gets
+  the same gain, so gestures follow the audio that is played.
+- Sentence joins in a four-sentence reply: pauses 0.26 to 0.41 s, no clicks, 47 of 47 words heard once.
+- Spanish and Chinese (multilingual engine): already about 1 dB louder than Edge TTS as generated
+  (two sentences each), so the gain was 0 dB and their audio was passed through unchanged.
+
+Edge TTS audio never passes through the adjustment (a test fails if it does).
+
+**Two audio changes, kept apart.**
+1. *The inference and memory fix preserves the generated waveform.* Synthesis with PyTorch's gradient
+   bookkeeping off gives the waveform the model would have generated anyway, sample for sample (checked
+   with the same random seed on the engine's own output, which the gain step has not yet touched). See "Memory kept with every reply" below.
+2. *A separate final gain adjustment changes amplitude only*, matching Chatterbox more closely to the
+   existing Edge TTS speaker level. After it, the audio the robot plays is the generated waveform times one
+   number. It is therefore not sample-for-sample identical to what the model generated, and is not meant
+   to be.
 
 **Longer run.** 50 English replies in a row (3 to 7 s long, teaching gestures on) with the nano engine on the
 card, the real gesture server on the same card, the real gesture client and a stand-in robot (no DDS):
@@ -281,7 +314,8 @@ program's ordinary memory rose by about 280 MB. Followed over 250 replies with n
 by 1.7 GB, about 7 MB per reply, until the machine's memory was nearly used up. The cause is in the
 Chatterbox package: the English engine's watermarking step keeps about 5 MB with every sentence when
 PyTorch's gradient bookkeeping is on, and the package leaves it on for that engine. The conversation program
-now synthesizes with it off (`torch.inference_mode()`), which gives the same audio sample for sample. After
+now synthesizes with it off (`torch.inference_mode()`), which preserves the generated waveform sample for
+sample (the final gain adjustment described above is a separate step that then scales it). After
 the change, 250 replies added 0.22 GB, most of it in the first 50, and 1 MB over the last 25. Speed and
 graphics memory did not change. The speech framework's own program (`run_robot.py`) calls the engine without
 this and was not changed; it should be expected to grow the same way in long sessions.

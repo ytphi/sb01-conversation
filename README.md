@@ -131,6 +131,8 @@ the 0.1.7 release on PyPI lacks options the speech framework uses. The first sta
   for one English sentence, 14 to 17 seconds for four, and 15 to 19 seconds for one Spanish sentence (the
   multilingual engine is slower); two to three times longer when other programs were using the processor.
   That is too slow for live conversation.
+  `SB01_CHATTERBOX_DEVICE=cuda` puts it on the graphics card only if at least 7 GB of its memory is free;
+  otherwise it stays on the processor and says so. Sharing a 6 GB card with the gesture server is not supported.
 - **Faster English on a small card (optional).** `SB01_CHATTERBOX_DEVICE=cuda SB01_CHATTERBOX_GPU_ENGINES=nano`
   puts only the English engine on the graphics card and leaves the multilingual engine on the processor.
   It is used only if 4 GB of graphics memory is free (the 2.5 GB the engine uses plus 1.5 GB kept for the
@@ -139,11 +141,18 @@ the 0.1.7 release on PyPI lacks options the speech framework uses. The first sta
   4.7 seconds after a reply was ready to be spoken (typically 2.3), with 3.6 of 6 GB in use. Spanish and Chinese stay on
   the processor and as slow as above. Putting both engines on a card needs clearly more than 8 GB, or the
   gesture server on another machine. Tested on that one laptop with a stand-in robot only.
-- **Loudness.** Chatterbox speaks about 5 dB quieter than Edge TTS, and the robot's volume is already at
-  its highest. Each reply is therefore turned up by one fixed factor toward Edge TTS's level, never past
-  1 dB below full scale and never by more than 6 dB. Edge TTS audio is not touched.
-  `SB01_CHATTERBOX_DEVICE=cuda` puts it on the graphics card only if at least 7 GB of its memory is free;
-  otherwise it stays on the processor and says so. Sharing a 6 GB card with the gesture server is not supported.
+- **Volume matched to Edge TTS (on purpose).** Edge TTS at the robot's volume setting is the listening level
+  already confirmed as right on the G1, so it is the reference. The English Chatterbox voice measured about
+  5 dB quieter than that, and the robot's volume is already at its highest. Each Chatterbox reply therefore
+  gets a final gain adjustment: the whole reply is multiplied by one number toward Edge TTS's speech level,
+  never past 1 dB below full scale and never by more than 6 dB. This changes amplitude only; the voice, the
+  timing and the pauses are not touched, and Edge TTS audio is not touched. Measured after the adjustment,
+  Chatterbox was about 1 dB below Edge TTS. This was measured on the audio as it is sent to the robot; the
+  G1's speaker itself was not retested with Chatterbox.
+- **Two separate audio changes.** The inference and memory fix preserves the generated waveform. A separate
+  final gain adjustment changes amplitude only, matching Chatterbox more closely to the existing Edge TTS
+  speaker level. So the audio the robot plays is the generated waveform times one number, not a
+  sample-for-sample copy of it.
 - **Monitoring:** monitoring is not included in this branch. Monitoring integration is a separate future step.
   No monitoring behavior was physically validated by this work.
 - **Status:** offline tests only. This has not been run on the physical robot.
