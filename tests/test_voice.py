@@ -737,8 +737,8 @@ class OriginalVolumeIsKept(unittest.TestCase):
             self.assertFalse(hasattr(vc.ChatterboxVoice, name) or hasattr(vc, name), name)
         with open(vc.__file__, encoding="utf-8") as source:
             code = source.read()
-        self.assertNotIn("* np.float32(", code)                                          # nothing multiplies the reply
         self.assertNotIn("SB01_CHATTERBOX_VOLUME", code)
+        self.assertEqual(code.count("* np.float32("), 2)     # only the clip guard: its probe, and the one reply it turns down
 
     def test_edge_tts_audio_goes_through_no_chatterbox_code(self):
         loop, robot = _loop(engine=False)                    # no Chatterbox voice at all
@@ -754,6 +754,131 @@ class OriginalVolumeIsKept(unittest.TestCase):
         loop, robot = _loop(engine)
         engine.fail = RuntimeError("boom")
         with mock.patch.object(vc.ChatterboxVoice, "_tidied", side_effect=AssertionError("Edge TTS must not use Chatterbox")):
+            _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
+
+
+class ClippingIsPrevented(unittest.TestCase):
+    """Only a reply that would exceed full scale is turned down, and only just enough.
+    Every other reply is untouched: scale exactly 1.0."""
+
+    @staticmethod
+    def _tone(amplitude, seconds=1.0):
+        return (amplitude * np.sin(np.arange(round(seconds * RATE)) * 0.05)).astype(np.float32)
+
+    def _made(self, wave, language="en", to_pcm16=_to_pcm16, **kwargs):
+        engine = _Engine()
+        engine.bad = (wave, RATE)
+        return vc.ChatterboxVoice(synth=engine, to_pcm16=to_pcm16).synthesize(REPLIES[language], language, **kwargs)
+
+    @staticmethod
+    def _peak(pcm):
+        return int(np.abs(np.frombuffer(pcm, dtype="<i2").astype(np.int32)).max())
+
+    def test_audio_within_range_has_scale_exactly_one_and_is_unchanged_byte_for_byte(self):
+        for language in ("en", "es", "zh"):
+            for amplitude in (0.02, 0.5, 0.97, 0.9999, 1.0):          # up to and including exactly full scale
+                with self.subTest(language=language, amplitude=amplitude):
+                    wave = self._tone(amplitude, 2.0)
+                    wave[100] = amplitude                                  # the peak is really there
+                    speech = self._made(wave, language)
+                    self.assertEqual(speech.scale, 1.0)
+                    self.assertIsInstance(speech.scale, float)
+                    self.assertEqual(speech.pcm, _to_pcm16(wave, RATE, 16000))
+                    self.assertEqual(speech.gesture_pcm, _to_pcm16(wave, RATE, 24000))
+
+    def test_audio_over_range_gets_only_the_smallest_reduction_that_fits(self):
+        for over in (1.02, 1.3, 2.5):
+            with self.subTest(over=over):
+                wave = self._tone(0.6, 2.0)
+                wave[4800] = over                                         # one sample above full scale
+                speech = self._made(wave)
+                self.assertLess(speech.scale, 1.0 / over)                 # enough to fit
+                self.assertGreater(speech.scale, 0.997 / over)            # and no more: within 0.03 dB of the least possible
+                self.assertAlmostEqual(speech.scale, vc.SAFE_PEAK / over, places=3)
+
+    def test_after_it_nothing_clips_in_either_copy(self):
+        wave = self._tone(0.6, 2.0)
+        wave[4800:4810] = 1.4
+        wave[9600] = -1.6
+        speech = self._made(wave)
+        for pcm in (speech.pcm, speech.gesture_pcm):
+            self.assertLess(self._peak(pcm), 32767)
+            self.assertGreater(self._peak(pcm), 32767 * 0.99)             # just under full scale, not far under
+        self.assertGreater(int(np.frombuffer(speech.pcm, dtype="<i2").min()), -32768)
+
+    def test_the_robot_audio_and_the_gesture_copy_get_the_same_scale(self):
+        wave = self._tone(0.6, 2.0)
+        wave[4800] = 1.3
+        speech = self._made(wave)
+        turned_down = wave * np.float32(speech.scale)
+        self.assertEqual(speech.pcm, _to_pcm16(turned_down, RATE, 16000))
+        self.assertEqual(speech.gesture_pcm, _to_pcm16(turned_down, RATE, 24000))
+
+    def test_a_peak_that_only_conversion_pushes_over_is_caught_too(self):
+        def overshooting(wave, rate, target):                # converting to 16 kHz raises peaks by 8%; 24 kHz does not
+            return _to_pcm16(np.clip(wave * (1.08 if target == 16000 else 1.0), -1, 1), rate, target)
+
+        wave = self._tone(0.97, 2.0)                         # within range as generated
+        speech = self._made(wave, to_pcm16=overshooting)
+        self.assertAlmostEqual(speech.scale, vc.SAFE_PEAK / (0.97 * 1.08), places=3)
+        self.assertLess(self._peak(speech.pcm), 32767)
+        self.assertEqual(speech.gesture_pcm, _to_pcm16(wave * np.float32(speech.scale), RATE, 24000))   # the same scale
+
+    def test_only_the_amplitude_changes_not_the_length_or_the_word_times(self):
+        wave = self._tone(0.6, 2.0)
+        normal = self._made(wave)
+        wave = wave.copy()
+        wave[4800] = 1.3
+        guarded = self._made(wave)
+        self.assertEqual((len(guarded.pcm), len(guarded.gesture_pcm), guarded.seconds), (len(normal.pcm), len(normal.gesture_pcm), normal.seconds))
+        self.assertEqual(guarded.words, normal.words)
+
+    def test_joined_sentences_get_one_scale_for_the_whole_reply(self):
+        engine = _Engine()
+        real = engine.synthesize
+
+        def one_too_loud(text, language):
+            wave, rate = real(text, language)
+            return wave * (2.4 if text.startswith("Second") else 1.0), rate          # 0.5 and 1.2
+
+        engine.synthesize = one_too_loud
+        speech = _voice(engine).synthesize("First sentence of the reply. Second sentence of the reply.", "en", split=True)
+        samples = np.abs(np.frombuffer(speech.gesture_pcm, dtype="<i2").astype(np.float32))
+        half = len(samples) // 2
+        self.assertAlmostEqual(speech.scale, vc.SAFE_PEAK / 1.2, places=3)
+        self.assertAlmostEqual(float(samples[half:].max() / samples[:half].max()), 2.4, places=1)   # their balance is kept
+        self.assertLess(float(samples.max()), 32767)
+
+    def test_without_gesture_audio_only_the_robot_audio_is_looked_at(self):
+        wave = self._tone(0.6)
+        wave[4800] = 1.3
+        speech = self._made(wave, gesture_audio=False)
+        self.assertIsNone(speech.gesture_pcm)
+        self.assertLess(self._peak(speech.pcm), 32767)
+
+    def test_the_program_says_when_it_happened_and_by_how_much(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        wave = self._tone(0.6, 2.0)
+        wave[4800] = 1.3
+        engine.bad = (wave, RATE)
+        printed = _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertIn("went above full scale: turned down by 2.30 dB so it does not clip", printed)
+        self.assertLess(self._peak(b"".join(robot.played)), 32767)
+        engine.bad = (self._tone(0.6, 2.0), RATE)
+        self.assertNotIn("turned down", _speak(loop, "Hello there, nice to meet you.", "en"))
+
+    def test_edge_tts_never_passes_through_it(self):
+        guard = mock.patch.object(vc.ChatterboxVoice, "_clip_guard", side_effect=AssertionError("Edge TTS must not be scaled"))
+        loop, robot = _loop(engine=False)                    # Edge TTS as the only voice
+        with guard:
+            _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
+        engine = _Engine()                                   # and Edge TTS as the fallback
+        loop, robot = _loop(engine)
+        engine.fail = RuntimeError("boom")
+        with guard:
             _speak(loop, "Hello there, nice to meet you.", "en")
         self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
 
@@ -959,11 +1084,12 @@ class JoinedSentences(unittest.TestCase):
         self.assertLess(np.abs(samples).max(), 32767)                      # not clipped
         self.assertGreater(np.abs(samples).max(), 3000)                    # and not faint
 
-    def test_audio_louder_than_full_scale_is_limited_not_wrapped(self):
+    def test_audio_louder_than_full_scale_is_turned_down_not_clipped_or_wrapped(self):
         engine = _Engine()
         engine.bad = (1.7 * np.sin(np.arange(RATE) * 0.05).astype(np.float32), RATE)
         samples = np.frombuffer(_voice(engine).synthesize("Hello there, nice to meet you.", "en").pcm, dtype="<i2")
-        self.assertEqual(int(np.abs(samples.astype(np.int32)).max()), 32767)
+        self.assertLess(int(np.abs(samples.astype(np.int32)).max()), 32767)
+        self.assertGreater(int(np.abs(samples.astype(np.int32)).max()), 32767 * 0.99)
         self.assertLess(np.abs(np.diff(samples.astype(np.int32))).max(), 6000)        # no wrap-around jumps
 
     def test_a_long_reply_with_gestures_keeps_each_gesture_in_its_own_sentence(self):

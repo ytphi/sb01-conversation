@@ -18,6 +18,7 @@ Usage:
 """
 
 import sys
+import math
 import os
 
 # Load .env / env file from the project root so ANTHROPIC_API_KEY is available
@@ -485,6 +486,9 @@ class SB01ConversationLoop:
                 self.voice = None
             return None
         self._voice_failures = 0
+        if speech.scale < 1.0:
+            print(f"[voice] this Chatterbox reply went above full scale: turned down by "
+                  f"{-20 * math.log10(speech.scale):.2f} dB so it does not clip")
         self._spoken_words = speech.words if GESTURE_CUES else []
         self._words_estimated = True
         return speech.pcm, speech.gesture_pcm

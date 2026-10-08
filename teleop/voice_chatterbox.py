@@ -43,13 +43,21 @@ Settings:
                                 (default 7 for both engines, 4 for nano, 5.5 for multilingual;
                                 it cannot be set below what the engines were measured to use)
 
-Volume. Chatterbox audio keeps the amplitude the model generated, in every
-language: nothing here turns it up or down, limits its peaks, or matches it to
-Edge TTS. (Synthesis runs with PyTorch's gradient bookkeeping off, see
-_no_gradients; that is a memory fix and does not change the waveform.) What is
-done to the audio is only what playing it needs: conversion to 16 kHz 16-bit
-for the robot and to 24 kHz for the gesture model and, when sentences are
-synthesized one by one, trimming silence and a 5 ms fade at each join.
+Volume. Chatterbox audio normally keeps exactly the amplitude the model
+generated, in every language: nothing here turns it up, matches it to Edge TTS,
+or lowers it as a rule. (Synthesis runs with PyTorch's gradient bookkeeping
+off, see _no_gradients; that is a memory fix and does not change the waveform.)
+What is done to the audio is only what playing it needs: conversion to 16 kHz
+16-bit for the robot and to 24 kHz for the gesture model and, when sentences
+are synthesized one by one, trimming silence and a 5 ms fade at each join.
+
+The one exception is actual digital clipping. 16-bit audio cannot hold a
+sample above full scale, and now and then the multilingual engine produces one
+(or the conversion to 16 kHz raises a peak over it). Only then, that one reply
+is multiplied by the largest number below 1 that brings its highest peak just
+under full scale (see _clip_guard). The robot audio and the gesture copy get
+the same number, Speech.scale records it, and the conversation program prints
+it. A reply within range is never touched: its scale is exactly 1.0.
 """
 
 import contextlib
@@ -92,6 +100,10 @@ LEAD_SILENCE_SECONDS = 0.08
 TAIL_SILENCE_SECONDS = 0.18
 FADE_SECONDS = 0.005
 QUIET = 0.02                # of the loudest sample: below this is silence
+# Only for a reply that would otherwise exceed full scale: where its highest
+# peak is put. 0.998 is 0.02 dB under full scale, enough that rounding to 16
+# bits cannot bring a sample back up to it.
+SAFE_PEAK = 0.998
 
 _SENTENCE_END = re.compile(r"[.!?]+[\"')\]]*\s+|[。！？]+")
 _CJK = re.compile(r"[㐀-鿿]")
@@ -109,6 +121,7 @@ class Speech:
     seconds: float
     words: list = field(default_factory=list)   # [(start seconds, word)]: ESTIMATES
     pieces: int = 1                     # how many sentences were synthesized separately
+    scale: float = 1.0                  # 1.0 unless the reply had to be turned down so it does not clip
 
 
 def sentences(text: str) -> list[str]:
@@ -356,9 +369,16 @@ class ChatterboxVoice:
             seconds = len(whole) / rate
             if not MIN_SECONDS <= seconds <= MAX_SECONDS:
                 raise VoiceUnavailable(f"the audio came out {seconds:.1f} s long, which cannot be right")
-            # The amplitude is the model's own: no gain, no limiter, no matching to Edge TTS.
+            # The amplitude is the model's own: no gain, no matching to Edge TTS.
             pcm = self._to_pcm16(whole, rate, PLAYBACK_RATE)
             gesture_pcm = self._to_pcm16(whole, rate, GESTURE_RATE) if gesture_audio else None
+            # Unless a sample would exceed full scale: then this reply alone is
+            # turned down just enough, the same for both copies.
+            scale = self._clip_guard(whole, rate, pcm, gesture_pcm)
+            if scale < 1.0:
+                whole = whole * np.float32(scale)
+                pcm = self._to_pcm16(whole, rate, PLAYBACK_RATE)
+                gesture_pcm = self._to_pcm16(whole, rate, GESTURE_RATE) if gesture_audio else None
         except VoiceUnavailable:
             raise
         except Exception as exc:
@@ -368,7 +388,29 @@ class ChatterboxVoice:
             raise VoiceUnavailable(_reason(exc)) from None
         if not pcm or len(pcm) % 2:
             raise VoiceUnavailable("the audio could not be converted for the robot's speaker")
-        return Speech(pcm, gesture_pcm, seconds, words, len(pieces))
+        return Speech(pcm, gesture_pcm, seconds, words, len(pieces), scale)
+
+    def _clip_guard(self, wave: np.ndarray, rate: int, pcm: bytes, gesture_pcm: bytes | None) -> float:
+        """1.0 if this reply fits in 16-bit audio as it is, which is the normal
+        case and leaves it untouched. Otherwise the largest scale that puts its
+        highest peak at SAFE_PEAK, counting the peak after conversion to each
+        rate that will be used (conversion can raise a peak)."""
+        made = [(PLAYBACK_RATE, pcm)] + ([(GESTURE_RATE, gesture_pcm)] if gesture_pcm else [])
+        if not any(self._at_full_scale(audio) for _, audio in made):
+            return 1.0                   # nothing reached full scale, so nothing can have been cut
+        # Something reached full scale: measure the real peaks, which the 16-bit
+        # audio no longer shows, by converting a copy scaled well inside range.
+        highest = float(np.abs(wave).max())
+        probe = 0.5 / highest
+        quiet = wave * np.float32(probe)
+        for target, _ in made:
+            converted = np.frombuffer(self._to_pcm16(quiet, rate, target), dtype="<i2").astype(np.int32)
+            highest = max(highest, float(np.abs(converted).max()) / 32767.0 / probe)
+        return 1.0 if highest <= 1.0 else SAFE_PEAK / highest
+
+    @staticmethod
+    def _at_full_scale(pcm: bytes) -> bool:
+        return bool(pcm) and int(np.abs(np.frombuffer(pcm, dtype="<i2").astype(np.int32)).max()) >= 32767
 
     @staticmethod
     def _no_gradients():
