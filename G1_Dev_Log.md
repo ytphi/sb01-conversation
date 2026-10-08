@@ -295,8 +295,8 @@ Checked on real audio with no robot and no DDS after it was added:
 - 50 English replies in a row with the English engine on the card, the real gesture server and client and
   a stand-in robot: 50 of 50 in the Chatterbox voice, Edge TTS never used, 50 gestures with arms released,
   graphics memory level at 3.44 GB, voice program's ordinary memory 5.70 to 5.81 GB. First audio typically
-  2.3 s after the reply was ready; one reply of the 50 waited 20.3 s, for a reason not identified (a
-  single slow synthesis of about 21 s was seen once before).
+  2.3 s after the reply was ready; one reply of the 50 waited 20.3 s (see "The 20-second reply" below; a
+  four-sentence first synthesis after loading once took about 21 s).
 
 The physical G1 speaker has not been retested with any of this.
 
@@ -363,6 +363,47 @@ now synthesizes with it off (`torch.inference_mode()`), which preserves the gene
 sample. After the change, 250 replies added 0.22 GB, most of it in the first 50, and 1 MB over the last 25. Speed and
 graphics memory did not change. The speech framework's own program (`run_robot.py`) calls the engine without
 this and was not changed; it should be expected to grow the same way in long sessions.
+
+**The 20-second reply (2026-10-08): not reproduced, cause not established.** In one 50-reply run a single
+reply waited 20.3 s before the robot spoke (typical: 2.3 s). That run logged only totals, so it is not known
+which reply it was or which step was slow. It was looked for again with every step timed separately (real
+models, English engine on the card, real gesture server and client, stand-in robot, no DDS):
+
+| Run | Model load | Wait before speech: median / slowest | Synthesis: median / slowest | Gesture request: median / slowest |
+|---|---|---|---|---|
+| 100 replies, nothing else running | 33 s | 2.42 / 5.46 s | 1.87 / 3.54 s | 0.53 / 1.89 s |
+| 12 replies, every processor kept busy by other programs | 69 s | 6.50 / 9.17 s | 5.50 / 6.89 s | 1.08 / 2.53 s |
+| 18 replies, another program filling the card to 5.8 of 6 GB part-way through | 50 s | 2.49 / 6.29 s | 1.94 / 3.46 s | 0.56 / 2.84 s |
+| 5 replies right after a restart, twice | 28 s | 2.7 to 2.9 / 4.9 s | | |
+
+Playback (sending the audio and waiting until speech and gesture are over) was 8 to 12 s for these 3 to 7 s
+replies in every run, which is the length of the speech plus the release of the arms; it did not vary.
+
+What this shows:
+- It did not happen again: 0 of 100 replies waited more than 5.5 s. The slowest reply in every run was the
+  first one after loading, at 4.6 to 9.2 s, with every step slower at once (synthesis, watermark, and the
+  gesture server's first motion). That first-reply slowness is real and repeatable; 20 s is not.
+- Not Chatterbox generating too much: it produced 24 to 25 speech tokens per second of speech in every reply,
+  and the time per token stayed within a factor of two.
+- Not graphics memory: with the card filled to 5.8 of 6 GB while the voice was running, replies were as
+  fast as before (slowest 3.6 s after it filled). Memory was level otherwise: card 3.38 GB after the first
+  reply and 3.59 GB from the fiftieth; voice program 5.14 to 5.29 GB over 100 replies; gesture server level.
+- Not the gesture server: its slowest first motion was 2.8 s by the client's clock (2.5 s by its own), always
+  for the first gesture; otherwise about 0.5 s.
+- Processor contention makes everything about 2.7 times slower (9.2 s at worst), not ten times.
+- The program itself never stalled: a timer inside it never ran more than 0.14 s late.
+- Once, in a three-reply trial, the first reply waited 14.6 s after a slow 76 s load, with every step on the
+  card about seven times slower in both programs at once while the processors were 7% busy and memory was
+  normal. That pattern (the card slow for both programs, nothing busy inside Linux) points outside these
+  programs, at the graphics driver or at Windows doing something else at that moment, which cannot be seen
+  from inside the test environment. The 20.3 s reply may have been the same thing; that is a guess.
+
+What a slow reply does not do, in every run including the original one and the provoked ones: no audio
+overlapped the reply before it, every gesture finished and the arms were released, Edge TTS was not
+triggered, and memory did not grow. In the original run, where it was also checked, no reply was played
+twice.
+
+Not known: whether this happens on the lab computer, which runs Linux directly and has a different card.
 
 Limits of what was checked:
 - The free-memory check was shown on the laptop to notice another program's use of the card (see "Memory
