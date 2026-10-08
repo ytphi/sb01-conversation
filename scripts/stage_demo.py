@@ -6,7 +6,8 @@ arm and waist gestures, and walk a little inside a small stage area.
   hear   the robot's own microphone and speech recognition (rt/audio_msg) when a sentence
          has "Yotie" in it, and anything typed
   think  Claude writes a short spoken reply with gesture and move marks (teleop/stage_moves.py)
-  speak  edge-tts on the robot's speaker (AudioClient.PlayStream) or the computer's speakers
+  speak  edge-tts (voice "Ava", or --voice) on the robot's speaker (AudioClient.PlayStream)
+         or the computer's speakers
   move   arms + waist on rt/arm_sdk, each gesture landing on its marked word;
          walking with LocoClient.SetVelocity, so the robot's own balance controller moves
          the legs. Nothing here ever publishes rt/lowcmd.
@@ -72,7 +73,9 @@ MODEL         = "claude-opus-5-5"
 MAX_HISTORY_TURNS = 8
 CLAUDE_TIMEOUT = 20.0
 
-VOICE         = "en-US-JennyNeural"
+# Microsoft neural voice (edge-tts), chosen by the team: friendly, female, and multilingual,
+# so it could also speak Spanish and Chinese. Any edge-tts voice works with --voice.
+VOICE         = "en-US-AvaMultilingualNeural"
 PCM_SAMPLE_RATE = 16000
 PCM_CHUNK_BYTES = 96000
 AUDIO_LATENCY = {"robot": 0.35, "laptop": 0.15, "none": 0.0}   # command -> first sound, seconds
@@ -458,8 +461,8 @@ class Voice:
     """edge-tts with word times. Plays on the robot (PlayStream), on this computer
     (ffplay), or not at all (text only, word times estimated)."""
 
-    def __init__(self, robot: Robot, output: str, log: Log):
-        self.robot, self.output, self.log = robot, output, log
+    def __init__(self, robot: Robot, output: str, log: Log, name: str = VOICE):
+        self.robot, self.output, self.log, self.name = robot, output, log, name
         self.player = None
 
     def synth(self, text: str):
@@ -472,7 +475,7 @@ class Voice:
 
             async def run():
                 audio, words = [], []
-                async for chunk in edge_tts.Communicate(text, VOICE, boundary="WordBoundary").stream():
+                async for chunk in edge_tts.Communicate(text, self.name, boundary="WordBoundary").stream():
                     if chunk["type"] == "audio":
                         audio.append(chunk["data"])
                     elif chunk["type"] == "WordBoundary":
@@ -483,7 +486,7 @@ class Voice:
             seconds = len(AudioSegment.from_mp3(io.BytesIO(mp3))) / 1000.0
             return mp3, words, seconds
         except Exception as exc:
-            say(f"  [voice] edge-tts failed ({type(exc).__name__}); falling back")
+            say(f"  [voice] edge-tts failed with voice {self.name} ({type(exc).__name__}: {exc}); falling back")
             self.log("tts_error", error=repr(exc))
             return None, [], sm.estimate_seconds(text)
 
@@ -674,6 +677,8 @@ def parse_args(argv=None):
     p.add_argument("--speed", type=float, default=0.15, help=f"walking speed m/s (max {MAX_WALK_SPEED})")
     p.add_argument("--offline", action="store_true", help="scripted replies instead of Claude")
     p.add_argument("--no-voice", action="store_true", help="print replies instead of speaking them")
+    p.add_argument("--voice", default=VOICE,
+                   help=f"edge-tts voice (default {VOICE}; e.g. en-US-EmmaMultilingualNeural, en-GB-SoniaNeural)")
     p.add_argument("--laptop-voice", action="store_true", help="robot mode: speak on this computer instead")
     p.add_argument("--typed-only", action="store_true", help="robot mode: ignore the robot's microphone")
     p.add_argument("--no-wake", action="store_true",
@@ -715,13 +720,13 @@ def main(argv=None):
         output = "laptop"
     if args.audio_latency is not None:
         AUDIO_LATENCY[output] = args.audio_latency
-    voice = Voice(robot, output, log)
+    voice = Voice(robot, output, log, name=args.voice)
     brain = Brain(args.offline, args.walk, log)
 
     target = f"robot on {args.interface}" if mode == "robot" else ("simulator (domain 1, lo)" if mode == "sim" else "fake robot")
     say(f"=== {ROBOT_NAME} stage demo: {target}{'  DRY RUN: nothing is sent to the robot' if args.dry_run else ''} ===")
     say(f"  arms: {'off' if args.no_arms else 'on'}   walking: {'on' if args.walk else 'off'} "
-        f"(box ±{args.box:.2f} m, {args.speed:.2f} m/s)   voice: {output}   "
+        f"(box ±{args.box:.2f} m, {args.speed:.2f} m/s)   voice: {output} ({args.voice})   "
         f"replies: {'scripted' if brain.client is None else MODEL}")
     if mode == "robot":
         say(f"  arms and walking only in FSM {sorted(args.fsm_ids)}; this program never changes the robot's mode")
