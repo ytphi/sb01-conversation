@@ -268,15 +268,19 @@ three-sentence reply in each language):
   between the fades were the model's own, and the joined audio was those pieces and nothing else.
 - Format: 16 kHz, one channel, 16-bit for the robot; 24 kHz copy for the gesture model; length unchanged
   for replies spoken in one piece.
-- Peaks in the robot audio: English -4.4 to -15.1 dBFS; Spanish -0.15 to -5.2 dBFS; Chinese -0.36 to
-  -3.3 dBFS. The multilingual engine's output runs close to full scale.
-- Full-scale samples: none in this run in any language. In an earlier offline run of six other Spanish
-  replies, two had one sample each at full scale (0.00 dBFS) in the robot audio. So: 2 of 12 Spanish
-  replies, one sample each, never two in a row; none seen in English or Chinese. This is reported, not
-  acted on: nothing limits or lowers the audio because of it.
-- Clipping or distortion: none detected in this run (no sample of the model's output or of the converted
-  audio went above full scale). No audible distortion was established in offline testing; nobody listened on
-  the G1's speaker as part of it.
+- Peaks in the robot audio (this run and the repeat in the final review): English -2.8 to -15.1 dBFS;
+  Spanish 0.00 to -5.4 dBFS; Chinese -0.03 to -3.5 dBFS. The multilingual engine's output runs close to
+  full scale.
+- Full-scale samples, over three offline runs of six Spanish replies each (18 replies): 3 replies reached
+  full scale in the robot audio. Two had one sample each at full scale. In the third the model's own
+  output went above full scale (peak +0.19 dBFS, 5 samples); 16-bit audio cannot hold that, so the
+  conversion cut 3 samples in the robot audio (by at most 0.33 dB) and 5 in the gesture copy. Never two in
+  a row. None were seen in English or Chinese. This is reported, not acted on: nothing limits or lowers
+  the audio because of it.
+- Clipping or distortion: the only clipping found is those few isolated samples in that one Spanish reply,
+  and it comes from the model's output exceeding what 16-bit audio can hold, not from anything this
+  integration does to the level. No audible distortion was established in offline testing; nobody listened
+  on the G1's speaker as part of it.
 - Speech recognition: English 118 words heard for 117 written, 96% match; Spanish 62 for 61, 93% match.
   Chinese: 95 characters heard for 95 written, 70% match character for character, against 72% for Edge
   TTS's Chinese voice on the same sentences with the same recognizer, which writes traditional characters
@@ -314,17 +318,18 @@ by 1.7 GB, about 7 MB per reply, until the machine's memory was nearly used up. 
 Chatterbox package: the English engine's watermarking step keeps about 5 MB with every sentence when
 PyTorch's gradient bookkeeping is on, and the package leaves it on for that engine. The conversation program
 now synthesizes with it off (`torch.inference_mode()`), which preserves the generated waveform sample for
-sample. After
-the change, 250 replies added 0.22 GB, most of it in the first 50, and 1 MB over the last 25. Speed and
+sample. After the change, 250 replies added 0.22 GB, most of it in the first 50, and 1 MB over the last 25. Speed and
 graphics memory did not change. The speech framework's own program (`run_robot.py`) calls the engine without
 this and was not changed; it should be expected to grow the same way in long sessions.
 
 Limits of what was checked:
-- The free-memory check could only be exercised here as "a 6 GB card is refused". Under Windows/WSL the
-  driver reported about 5 GB free whatever other programs held, so it could not be shown to notice another
-  program's use. On the lab computer (Linux) the figure should be accurate; that is untested.
+- The free-memory check was shown on the laptop to notice another program's use of the card (see "Memory
+  headroom" above: with another program holding 4.8 GB it reported 1.2 GB free and kept Chatterbox on the
+  processor). That depends on the second reading, from `nvidia-smi`; PyTorch's own figure under Windows/WSL
+  stayed at about 5 GB whatever other programs held. It reads the first card only, and it has not been run
+  on the lab computer.
 - A real out-of-memory error could not be produced on the laptop: with the card deliberately filled and the
-  check lowered, the driver let Chatterbox spill into ordinary memory instead of failing. The handling of that
+  check lowered (possible at the time), the driver let Chatterbox spill into ordinary memory instead of failing. The handling of that
   error (reason printed, models released, Edge TTS speaks) is covered by tests with a stand-in engine only.
 - Known limitation, pointing gesture (not caused by Chatterbox; gesture code unchanged since `f2016e7`).
   The pointing gesture does not always reach its full pose. In simulation, 16 placements across a

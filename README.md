@@ -144,9 +144,11 @@ the 0.1.7 release on PyPI lacks options the speech framework uses. The first sta
 - **Volume is left unchanged.** Chatterbox audio is played at the amplitude the model generates, in English,
   Spanish and Chinese. Nothing turns it up or down, limits its peaks, or matches it to Edge TTS, and Edge TTS
   audio is not touched either. Chatterbox's volume sounded acceptable in the team's G1 testing of the voice;
-  this integration itself has not been run on the robot. In offline testing some Spanish replies had a sample at full scale (2 of 12 replies, one sample each); no audible
-  distortion was established in that testing. Checking it on the robot's own speaker is still pending, and
-  volume limiting may be reconsidered only if that shows an audible problem.
+  this integration itself has not been run on the robot. In offline testing some Spanish replies reached
+  full scale (3 of 18 replies, one to three samples each; in one of them the model's own output went slightly
+  above full scale, which 16-bit audio cannot hold, so those few samples were cut). No audible distortion was
+  established in that testing. Checking it on the robot's own speaker is still pending, and volume limiting
+  may be reconsidered only if that shows an audible problem.
 - **Monitoring:** monitoring is not included in this branch. Monitoring integration is a separate future step.
   No monitoring behavior was physically validated by this work.
 - **Status:** offline tests only. This has not been run on the physical robot.

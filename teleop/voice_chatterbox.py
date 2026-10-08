@@ -84,7 +84,6 @@ GPU_GB_USED_BY_ALL = 6.0
 GPU_GB_RESERVE = 1.5
 GPU_GB_PER_ENGINE = {name: used + GPU_GB_RESERVE for name, used in GPU_GB_USED.items()}
 
-
 # Sentences synthesized one by one are joined with a pause. Each piece keeps at
 # most this much of its own silence and is faded at both ends, so a join can
 # neither click nor leave a long gap.
@@ -281,7 +280,11 @@ class ChatterboxVoice:
             engine = entry.get("engine", "multilingual")
             if engine not in ENGINES:
                 raise VoiceUnavailable(f"tts.languages.{language}.engine is {engine!r}; use one of {', '.join(ENGINES)}")
-            clip = resolve_path(entry.get("voice"))
+            try:
+                clip = resolve_path(entry.get("voice"))
+            except Exception:
+                raise VoiceUnavailable(f"tts.languages.{language}.voice in the speech framework's config "
+                                       f"is not a file path ({entry.get('voice')!r})") from None
             if clip and not os.path.isfile(clip):
                 raise VoiceUnavailable(f"the voice clip for {language!r} was not found: {os.path.basename(clip)} "
                                        f"(set in tts.languages.{language}.voice)")

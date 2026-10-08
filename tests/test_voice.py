@@ -778,6 +778,15 @@ class VoiceSettings(unittest.TestCase):
         self.assertIn("tts.languages.en.engine is 'turbo-max'", reason)
         self.assertIn("nano, multilingual", reason)
 
+    def test_a_voice_setting_that_is_not_a_path(self):
+        import ntpath                                        # a real path function, so a number makes it fail as it would for real
+        config = dict(GOOD_CONFIG, languages={"en": {"engine": "nano", "voice": 123}})
+        with _framework(config):
+            sys.modules["settings"].resolve_path = lambda path: ntpath.join("voices", path) if path else None
+            with self.assertRaises(vc.VoiceUnavailable) as raised:
+                vc.ChatterboxVoice()
+        self.assertIn("tts.languages.en.voice in the speech framework's config is not a file path (123)", str(raised.exception))
+
     def test_no_languages_at_all(self):
         self.assertIn("no tts.languages", self._refused({"device": "cpu"}))
 
