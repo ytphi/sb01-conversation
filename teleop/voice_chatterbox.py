@@ -30,9 +30,17 @@ enough memory, unusable audio) is raised as VoiceUnavailable with a plain
 reason, after the models and their memory have been let go, so the caller can
 say it and use its other voice.
 
+One engine on the card. With cuda asked for, SB01_CHATTERBOX_GPU_ENGINES can
+name the engines that go on the graphics card (for example "nano", the English
+engine); the others stay on the processor. Less memory is then required, so a
+small card can be shared with the gesture server for the languages that engine
+speaks. The audio is made by the same model either way.
+
 Settings:
-  SB01_CHATTERBOX_DEVICE   cpu (default) | cuda   overrides tts.device in config.yaml
-  SB01_CHATTERBOX_GPU_GB   free graphics memory required before cuda is used (default 7)
+  SB01_CHATTERBOX_DEVICE        cpu (default) | cuda   overrides tts.device in config.yaml
+  SB01_CHATTERBOX_GPU_ENGINES   with cuda: which engines use the card (default: all), e.g. nano
+  SB01_CHATTERBOX_GPU_GB        free graphics memory required before cuda is used
+                                (default 7 for both engines, 2.5 for nano, 4.5 for multilingual)
 """
 
 import gc
@@ -54,6 +62,9 @@ MIN_SECONDS = 0.15          # shorter than this is not speech
 MAX_SECONDS = 60.0          # longer than this for one reply is a runaway generation
 GPU_FREE_GB_NEEDED = 7.0    # both engines measured at about 5.7 GB, plus room to work
 ENGINES = ("nano", "multilingual")
+# One engine alone, measured at its peak (weights + a long reply), plus room to work:
+# nano 2.3 GB, multilingual 3.6 GB.
+GPU_GB_PER_ENGINE = {"nano": 2.5, "multilingual": 4.5}
 
 # Sentences synthesized one by one are joined with a pause. Each piece keeps at
 # most this much of its own silence and is faded at both ends, so a join can
@@ -128,9 +139,20 @@ def gpu_free_gb() -> float | None:
         return None
 
 
-def choose_device(asked: str | None) -> tuple[str, str]:
+def gpu_engines() -> tuple:
+    """The engines SB01_CHATTERBOX_GPU_ENGINES names, or () for all of them."""
+    names = tuple(dict.fromkeys(
+        name.strip().lower() for name in os.environ.get("SB01_CHATTERBOX_GPU_ENGINES", "").split(",") if name.strip()))
+    for name in names:
+        if name not in ENGINES:
+            raise VoiceUnavailable(f"SB01_CHATTERBOX_GPU_ENGINES names {name!r}; use {' or '.join(ENGINES)}")
+    return () if set(names) == set(ENGINES) else names
+
+
+def choose_device(asked: str | None, engines: tuple = ()) -> tuple[str, str]:
     """(device to use, why) for what was asked for. Only an explicit "cuda"
-    can put Chatterbox on the graphics card, and only if enough of it is free."""
+    can put Chatterbox on the graphics card, and only if enough of it is free.
+    `engines` are the ones that would use the card; () means all of them."""
     asked = (asked or "").strip().lower()
     if asked in ("", "auto", "cpu"):
         why = "" if asked == "cpu" else "the processor is the default, so the graphics card is left to the gesture server"
@@ -139,10 +161,11 @@ def choose_device(asked: str | None) -> tuple[str, str]:
         return "mps", ""
     if not asked.startswith("cuda"):
         raise VoiceUnavailable(f"SB01_CHATTERBOX_DEVICE / tts.device is {asked!r}; use cpu or cuda")
+    usual = sum(GPU_GB_PER_ENGINE[name] for name in engines) if engines else GPU_FREE_GB_NEEDED
     try:
-        needed = float(os.environ.get("SB01_CHATTERBOX_GPU_GB", "") or GPU_FREE_GB_NEEDED)
+        needed = float(os.environ.get("SB01_CHATTERBOX_GPU_GB", "") or usual)
     except ValueError:
-        needed = GPU_FREE_GB_NEEDED
+        needed = usual
     free = gpu_free_gb()
     if free is None:
         return "cpu", "cuda was asked for but no usable graphics card was found, so it runs on the processor"
@@ -182,12 +205,24 @@ class ChatterboxVoice:
             raise VoiceUnavailable(_reason(exc)) from None
         self._check_voices(config, resolve_path)
         asked = os.environ.get("SB01_CHATTERBOX_DEVICE", "").strip() or str(config.get("device", ""))
-        self.device, self.device_note = choose_device(asked)
-        config["device"] = self.device           # never "auto": that would pick the graphics card
+        some = gpu_engines()
+        self.device, self.device_note = choose_device(asked, some)
+        on_card = some if self.device.startswith("cuda") else ()
+        # never "auto": that would pick the graphics card. With only some
+        # engines on the card, the rest are made for the processor.
+        config["device"] = "cpu" if on_card else self.device
         try:
             synth = SpeechSynth(config)
+            for name in on_card:
+                synth._engine(name).device = self.device       # made, not loaded: load() reads this
         except Exception as exc:
             raise VoiceUnavailable(_reason(exc)) from None
+        if on_card:
+            fast = sorted(language for language, entry in config["languages"].items()
+                          if (entry or {}).get("engine", "multilingual") in on_card)
+            self.device_note = (f"only the {' and '.join(on_card)} engine is on the graphics card ({self.device_note}): "
+                                f"{', '.join(fast) or 'no language'} is fast, other languages are synthesized "
+                                f"on the processor and are slow")
         return synth, to_pcm16, bool(config.get("preload", True))
 
     @staticmethod

@@ -185,8 +185,8 @@ server on another machine.
 | One Spanish sentence (about 2.5 s of speech, multilingual engine) | 15 to 19 s | 14 to 15 s measured |
 
 The right-hand column is from the first measurements, taken while other test jobs were running; the
-"about 40 s for the first reply" seen then was not reproduced on an idle machine (first reply 5.6 s, later
-ones 4.3 s). Claude's own reply time comes on top of these. This is too slow for live conversation, most of
+"about 40 s for the first reply" seen then was not reproduced on an idle machine (first reply 5.6 to 10.5 s, later
+ones 4.3 to 6.1 s). Claude's own reply time comes on top of these. This is too slow for live conversation, most of
 all in Spanish and Chinese. No safe software change was found that makes it faster:
 - the models are loaded once at startup (preload works) and the same model objects serve every reply;
 - settings are read once (0.3 s);
@@ -197,8 +197,33 @@ all in Spanish and Chinese. No safe software change was found that makes it fast
   where it is needed to time them;
 - a warm-up synthesis at startup was tried and dropped: it saved about 1 s on the first reply and added
   12 s to startup.
-A faster voice needs hardware: a graphics card with clearly more than 8 GB, or the gesture server on
-another machine so Chatterbox can have the card.
+Inside the models the time is half speech tokens (T3) and half tokens-to-sound (S3Gen); the watermark costs
+nothing measurable. Switching gradients off or flushing tiny numbers gave the same audio sample for sample
+and no reliable gain. On the processor there is nothing left to take out.
+
+**English engine on the card (added, opt-in).** Measured alone on the card at their peak (weights plus a
+long reply), the nano engine needs 2.3 GB and the multilingual engine 3.6 GB. Nano therefore fits beside
+the gesture server (1.3 GB) on a 6 GB card with room to spare, which both engines together do not.
+`SB01_CHATTERBOX_DEVICE=cuda` with `SB01_CHATTERBOX_GPU_ENGINES=nano` puts only that engine on the card,
+if 2.5 GB is free (4.5 GB for `multilingual`); every other engine is made for the processor. Without
+`SB01_CHATTERBOX_GPU_ENGINES` nothing changes: the processor is still the default and cuda for both
+engines still needs 7 GB. The audio comes from the same model with the same settings.
+
+Tested on the laptop (RTX 3050 6 GB) with the real models, the real gesture server on the same card and a
+stand-in robot, teaching gestures on:
+- 25 English replies in a row (3 to 7 s long): all in the Chatterbox voice, a gesture every time, arms
+  released every time, no fallback, no error in the gesture server.
+- Time from "reply ready to be spoken" to the first audio: 1.7 to 4.5 s, typically 2.6 s (on the processor:
+  4 to 17 s for the same kind of reply). A four-sentence reply was synthesized in 3.7 s instead of 17 s.
+- Graphics memory for the whole card: 3.2 GB before the first reply, 3.4 GB at most, flat over the last
+  replies, back to 1.3 GB when the voice program ended.
+- Audio checks, 10 of 10: 16 kHz one channel 16-bit, 4.9 dB below Edge TTS, pauses between sentences
+  0.37 to 0.38 s, no clicks, a recognizer heard all 47 words once.
+- Spanish and Chinese still use the multilingual engine on the processor (15 s for a 2 s sentence).
+That is one machine and one sitting, 25 replies: enough to say it worked there, not that it is proven for a
+long session. The multilingual engine on the card beside the gesture server was not tested; by the
+measurements it would leave under 1 GB free. Both engines on a card still need clearly more than 8 GB, or
+the gesture server on another machine.
 
 Limits of what was checked:
 - The free-memory check could only be exercised here as "a 6 GB card is refused". Under Windows/WSL the

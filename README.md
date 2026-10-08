@@ -130,8 +130,13 @@ the 0.1.7 release on PyPI lacks options the speech framework uses. The first sta
   while a reply is synthesized. On the development laptop with nothing else running that took 4 to 6 seconds
   for one English sentence, 14 to 17 seconds for four, and 15 to 19 seconds for one Spanish sentence (the
   multilingual engine is slower); two to three times longer when other programs were using the processor.
-  That is too slow for live conversation. For that, Chatterbox needs a graphics card with clearly more than
-  8 GB, or the gesture server has to run on another machine.
+  That is too slow for live conversation.
+- **Faster English on a small card (optional).** `SB01_CHATTERBOX_DEVICE=cuda SB01_CHATTERBOX_GPU_ENGINES=nano`
+  puts only the English engine on the graphics card (it is used only if 2.5 GB is free) and leaves the
+  multilingual engine on the processor. On the development laptop's 6 GB card, beside the gesture server, the
+  robot then started speaking 1.7 to 4.5 seconds after a reply was ready to be spoken (typically 2.6), with
+  3.4 of 6 GB in use. Other languages stay as slow as above. Putting both engines on a card needs clearly
+  more than 8 GB, or the gesture server on another machine.
   `SB01_CHATTERBOX_DEVICE=cuda` puts it on the graphics card only if at least 7 GB of its memory is free;
   otherwise it stays on the processor and says so. Sharing a 6 GB card with the gesture server is not supported.
 - **Monitoring:** monitoring is not included in this branch. Monitoring integration is a separate future step.

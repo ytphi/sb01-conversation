@@ -215,6 +215,9 @@ class WhenChatterboxIsNotAvailable(unittest.TestCase):
         self.assertIn("does not match the speech framework", printed)
 
 
+MADE = []                                    # the engines each stand-in SpeechSynth was asked to make
+
+
 @contextlib.contextmanager
 def _framework(tts_config, to_pcm16=_to_pcm16):
     """A throw-away copy of the speech framework's shape (settings, SpeechSynth,
@@ -231,6 +234,12 @@ def _framework(tts_config, to_pcm16=_to_pcm16):
         def __init__(self, config):
             super().__init__()
             built.append(dict(config))
+            self.made = {}                                   # engine name -> the engine, as SpeechSynth._engine makes them
+            self.config = config
+            MADE.append(self.made)
+
+        def _engine(self, kind):
+            return self.made.setdefault(kind, types.SimpleNamespace(device=self.config["device"], model=None))
 
     fakes = {
         "_paths": types.ModuleType("_paths"),
@@ -263,7 +272,8 @@ class WhereChatterboxRuns(unittest.TestCase):
     """The graphics card is the gesture server's: Chatterbox uses it only when told to, and only if it fits."""
 
     def setUp(self):
-        self._env = {name: os.environ.pop(name, None) for name in ("SB01_CHATTERBOX_DEVICE", "SB01_CHATTERBOX_GPU_GB")}
+        self._env = {name: os.environ.pop(name, None)
+                     for name in ("SB01_CHATTERBOX_DEVICE", "SB01_CHATTERBOX_GPU_GB", "SB01_CHATTERBOX_GPU_ENGINES")}
 
     def tearDown(self):
         for name, value in self._env.items():
@@ -348,6 +358,62 @@ class WhereChatterboxRuns(unittest.TestCase):
         self.assertIn("Chatterbox ready on the processor", printed)
         self.assertIn("left to the gesture server", printed)
         self.assertIn("expect a pause before each one", printed)
+
+
+class OneEngineOnTheCard(unittest.TestCase):
+    """SB01_CHATTERBOX_GPU_ENGINES: the named engine uses the card, the rest stay on the processor."""
+
+    setUp, tearDown = WhereChatterboxRuns.setUp, WhereChatterboxRuns.tearDown
+
+    def _made(self, free, device="cuda", engines="nano"):
+        if device:
+            os.environ["SB01_CHATTERBOX_DEVICE"] = device
+        os.environ["SB01_CHATTERBOX_GPU_ENGINES"] = engines
+        with _framework(dict(GOOD_CONFIG)) as built, mock.patch.object(vc, "gpu_free_gb", return_value=free):
+            voice = vc.ChatterboxVoice()
+        return voice, built[0], {name: engine.device for name, engine in MADE[-1].items()}
+
+    def test_the_english_engine_fits_beside_the_gesture_server_on_a_6_gb_card(self):
+        voice, config, devices = self._made(free=4.7)
+        self.assertEqual(config["device"], "cpu")                           # what every other engine is made with
+        self.assertEqual(devices, {"nano": "cuda"})
+        self.assertEqual(voice.device, "cuda")
+        self.assertIn("only the nano engine is on the graphics card", voice.device_note)
+        self.assertIn("en is fast, other languages are synthesized on the processor and are slow", voice.device_note)
+
+    def test_it_needs_less_memory_than_both_engines_but_is_still_checked(self):
+        for free, expected in ((2.4, "cpu"), (2.5, "cuda"), (6.0, "cuda")):
+            with mock.patch.object(vc, "gpu_free_gb", return_value=free):
+                self.assertEqual(vc.choose_device("cuda", ("nano",))[0], expected, free)
+        for free, expected in ((4.4, "cpu"), (4.5, "cuda")):
+            with mock.patch.object(vc, "gpu_free_gb", return_value=free):
+                self.assertEqual(vc.choose_device("cuda", ("multilingual",))[0], expected, free)
+
+    def test_without_enough_memory_everything_runs_on_the_processor_and_says_so(self):
+        voice, config, devices = self._made(free=1.9)
+        self.assertEqual((voice.device, config["device"], devices), ("cpu", "cpu", {}))
+        self.assertIn("only 1.9 GB of graphics memory is free", voice.device_note)
+        self.assertIn("needs about 2.5 GB", voice.device_note)
+
+    def test_naming_engines_does_nothing_unless_cuda_is_asked_for(self):
+        for device in ("", "cpu", "auto"):
+            os.environ.pop("SB01_CHATTERBOX_DEVICE", None)
+            voice, config, devices = self._made(free=24.0, device=device)
+            self.assertEqual((voice.device, config["device"], devices), ("cpu", "cpu", {}), device)
+
+    def test_naming_every_engine_is_the_same_as_naming_none(self):
+        voice, config, devices = self._made(free=6.0, engines="nano, multilingual")
+        self.assertEqual((voice.device, config["device"], devices), ("cpu", "cpu", {}))     # 7 GB needed, as before
+        voice, config, devices = self._made(free=8.0, engines="multilingual,nano")
+        self.assertEqual((voice.device, config["device"], devices), ("cuda", "cuda", {}))
+
+    def test_an_engine_name_that_does_not_exist_is_refused(self):
+        os.environ["SB01_CHATTERBOX_DEVICE"] = "cuda"
+        os.environ["SB01_CHATTERBOX_GPU_ENGINES"] = "turbo"
+        with _framework(dict(GOOD_CONFIG)):
+            with self.assertRaises(vc.VoiceUnavailable) as raised:
+                vc.ChatterboxVoice()
+        self.assertIn("SB01_CHATTERBOX_GPU_ENGINES names 'turbo'; use nano or multilingual", str(raised.exception))
 
 
 class VoiceSettings(unittest.TestCase):
