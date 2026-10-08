@@ -11,6 +11,13 @@ anthropic             # claude
 
 # TTS: Chatterbox Nano + Multilingual (pulls in torch / torchaudio)
 chatterbox-tts
+scipy                 # resampling to the G1's 16 kHz
+
+# TTS: UTAU voicebank engine (voice: teto). The banks themselves are not in git:
+# see utilities/voice-refs/README.md
+pyworld
+cmudict               # English
+pykakasi              # Japanese
 
 # STT on the PC (stt.source: g1-mic / pc-mic). Not needed for g1-asr.
 faster-whisper

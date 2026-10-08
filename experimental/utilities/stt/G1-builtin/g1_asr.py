@@ -12,6 +12,7 @@ Anything heard while the robot is speaking is dropped so it doesn't hear itself.
 import json
 import queue
 import threading
+import time
 
 from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.std_msgs.msg.dds_ import String_
@@ -27,7 +28,8 @@ class G1ASRInput:
         self.topic         = topic
         self.debounce_s    = debounce_s
         self.min_chars     = min_chars
-        self._queue: queue.Queue[str] = queue.Queue()
+        self._queue: queue.Queue[tuple[str, float]] = queue.Queue()
+        self.last_speech_end = self.last_turn_end = self.last_transcribed = None
         self._pending = ""
         self._timer: threading.Timer | None = None
         self._sub = None
@@ -40,8 +42,11 @@ class G1ASRInput:
     def listen(self) -> str | None:
         """Block until the next utterance. Drops anything queued while speaking."""
         while True:
-            text = self._queue.get()
+            text, t_final = self._queue.get()
             if not self.speaking.is_set():
+                # the robot decides the end of turn itself; we only see when it reported it
+                self.last_speech_end, self.last_turn_end = None, t_final
+                self.last_transcribed = t_final
                 return text
             print(f"[asr] (dropped late ASR: {text!r})")
 
@@ -74,7 +79,7 @@ class G1ASRInput:
             self._timer.cancel()
         if data.get("is_final", False):
             self._pending = ""
-            self._queue.put(text)
+            self._queue.put((text, time.time()))
         else:
             self._pending = text
             self._timer = threading.Timer(self.debounce_s, self._flush_pending)
@@ -84,4 +89,4 @@ class G1ASRInput:
     def _flush_pending(self):
         text, self._pending = self._pending, ""
         if text and not self.speaking.is_set():
-            self._queue.put(text)
+            self._queue.put((text, time.time()))

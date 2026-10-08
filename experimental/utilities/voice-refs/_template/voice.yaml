@@ -1,0 +1,22 @@
+# Copy this folder to voice-refs/<name>/ (the folder name becomes the voice name),
+# drop the clip next to this file, and run with --voice <name>.
+# Folders starting with "_" are ignored by the registry.
+
+description: My friend's voice
+# Whose voice this is and their OK to clone it. The runner warns while this is missing.
+consent:
+  by: Full Name
+  date: 2026-10-07
+  scope: sb01 demos at CSUSB          # what they agreed to
+
+clip: clip.wav          # default: the first audio file in this folder (wav / mp3 / flac / ogg / m4a)
+# engine: nano          # nano (English, fastest) or multilingual (default from tts.clone_defaults)
+# clips:                # optional: a different clip per language
+#   ja: clip_ja.wav
+# params:               # passed to the engine for every language
+#   exaggeration: 0.6
+# fallback: chatterbox  # voice for languages this one doesn't list (default: tts.clone_fallback)
+#
+# A UTAU voicebank works too: put (or point to) the folder holding oto.ini
+#   bank: ~/voicebanks/somebank       language is detected from its aliases
+#   base_pitch: -2

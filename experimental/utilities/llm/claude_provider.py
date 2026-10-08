@@ -1,5 +1,7 @@
 """Anthropic Claude provider. pip install anthropic"""
 
+from collections.abc import Iterator
+
 from llm_providers import LLMProvider, Message
 
 
@@ -21,3 +23,12 @@ class ClaudeProvider(LLMProvider):
             messages=[{"role": m.role, "content": m.content} for m in messages],
         )
         return "".join(b.text for b in resp.content if b.type == "text").strip()
+
+    def stream(self, system: str, messages: list[Message]) -> Iterator[str]:
+        with self._client.messages.stream(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=system,
+            messages=[{"role": m.role, "content": m.content} for m in messages],
+        ) as stream:
+            yield from stream.text_stream

@@ -5,3 +5,19 @@ speech-framework/config.local.yaml
 utilities/voice-refs/*.wav
 utilities/voice-refs/*.mp3
 utilities/voice-refs/*.flac
+
+# Voice clips in voice-refs/<name>/ folders (real people's voices; keep out of git)
+utilities/voice-refs/**/*.wav
+utilities/voice-refs/**/*.mp3
+utilities/voice-refs/**/*.MP3
+utilities/voice-refs/**/*.flac
+utilities/voice-refs/**/*.ogg
+utilities/voice-refs/**/*.m4a
+
+# UTAU voicebanks: redistribution is prohibited, never add them here
+utilities/voice-refs/**/oto.ini
+utilities/voice-refs/**/*.frq
+voicebanks/
+
+# Per-turn timing logs
+speech-framework/logs/

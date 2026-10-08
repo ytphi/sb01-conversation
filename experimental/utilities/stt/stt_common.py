@@ -2,7 +2,7 @@
 stt_common.py  -  shared pieces for speech recognition on the PC
 
   STTEngine      - interface every engine implements: transcribe(audio) → text
-  AudioSource    - anything that delivers 16 kHz mono int16 PCM
+  AudioSource    - anything that delivers 16 kHz int16 PCM (mono, or interleaved multi-channel)
   PcMicSource    - the PC's own microphone (sounddevice)
   LocalASRInput  - SpeechInput: audio source → Silero VAD end-of-turn → STT engine
 
@@ -35,9 +35,15 @@ class STTEngine(ABC):
 
 
 class AudioSource(ABC):
-    """Pushes 16 kHz mono int16 PCM bytes (any chunk size) into self.chunks."""
+    """Pushes 16 kHz int16 PCM bytes (any chunk size) into self.chunks.
+
+    `channels` > 1 means interleaved frames (e.g. a future stereo or array mic).
+    Speech recognition reads channel 0; the other channels are passed through
+    untouched for later use (direction of arrival, Phase 6).
+    """
     name = "base"
     hint = ""
+    channels = 1
 
     def __init__(self):
         self.chunks: queue.Queue[bytes] = queue.Queue()
@@ -84,8 +90,12 @@ class LocalASRInput:
         self.preroll_frames = max(1, int(preroll_ms / 1000 * SAMPLE_RATE / VAD_FRAME))
         self.max_frames     = int(max_utterance_s * SAMPLE_RATE / VAD_FRAME)
         self.min_chars      = min_chars
-        self._utterances: queue.Queue[np.ndarray] = queue.Queue()
+        self._utterances: queue.Queue[tuple[np.ndarray, float]] = queue.Queue()
         self._vad = None
+        self.heard_audio      = threading.Event()   # set once the source delivers anything
+        self.last_speech_end  = None                # time.time() the user stopped talking (estimate)
+        self.last_turn_end    = None                # time.time() VAD decided the turn was over
+        self.last_transcribed = None                # time.time() when its transcript was ready
 
     def start(self):
         from silero_vad import VADIterator, load_silero_vad
@@ -101,11 +111,14 @@ class LocalASRInput:
     def listen(self) -> str | None:
         """Block until the next utterance and return its transcript."""
         while True:
-            audio = self._utterances.get()
+            audio, t_end = self._utterances.get()
             t0 = time.time()
             text = self.engine.transcribe(audio).strip()
             print(f"[timing] stt {time.time() - t0:.2f}s for {len(audio) / SAMPLE_RATE:.1f}s of audio")
             if len(text) >= self.min_chars:
+                self.last_turn_end    = t_end
+                self.last_speech_end  = t_end - self.min_silence_ms / 1000
+                self.last_transcribed = time.time()
                 return text
 
     def flush(self):
@@ -116,8 +129,9 @@ class LocalASRInput:
     # ── background segmentation ─────────────────────────────────────────────
 
     def _frames(self):
-        """Re-chunk the source's PCM into VAD-sized float32 frames."""
-        frame_bytes = VAD_FRAME * 2
+        """Re-chunk the source's PCM into VAD-sized float32 frames (channel 0 only)."""
+        channels    = max(1, getattr(self.source, "channels", 1))
+        frame_bytes = VAD_FRAME * 2 * channels
         buf = bytearray()
         warned = False
         while True:
@@ -129,10 +143,13 @@ class LocalASRInput:
                     warned = True
                 continue
             warned = False
+            self.heard_audio.set()
             buf.extend(chunk)
             while len(buf) >= frame_bytes:
                 frame = np.frombuffer(bytes(buf[:frame_bytes]), dtype=np.int16)
                 del buf[:frame_bytes]
+                if channels > 1:
+                    frame = frame.reshape(-1, channels)[:, 0]
                 yield frame.astype(np.float32) / 32768.0
 
     def _segment_loop(self):
@@ -158,7 +175,7 @@ class LocalASRInput:
 
             speech.append(frame)
             if (event and "end" in event) or len(speech) >= self.max_frames:
-                self._utterances.put(np.concatenate(speech))
+                self._utterances.put((np.concatenate(speech), time.time()))
                 speech = None
                 preroll.clear()
                 self._vad.reset_states()

@@ -20,6 +20,7 @@ _DIRS = [
     os.path.join(UTILITIES_DIR, "tts"),
     os.path.join(UTILITIES_DIR, "tts", "chatterbox-nano"),
     os.path.join(UTILITIES_DIR, "tts", "chatterbox-ml3"),
+    os.path.join(UTILITIES_DIR, "tts", "utau"),
     os.path.join(UTILITIES_DIR, "tts", "G1-builtin"),
     os.path.join(UTILITIES_DIR, "stt"),
     os.path.join(UTILITIES_DIR, "stt", "faster-whisper"),

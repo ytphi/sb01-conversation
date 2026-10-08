@@ -1,0 +1,6 @@
+description: Friends' demo voice (1007.MP3, film dialogue)
+clip: 1007.MP3
+engine: nano            # English with Nano (about 3x faster than Multilingual); zh / ja / es
+                        # clone the same clip with Multilingual
+fallback: chatterbox
+# consent: {by: ..., date: ..., scope: ...}   # record whose voice this is before using it in public

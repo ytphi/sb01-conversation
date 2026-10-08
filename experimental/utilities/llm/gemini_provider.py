@@ -1,5 +1,7 @@
 """Google Gemini provider (default). pip install google-genai"""
 
+from collections.abc import Iterator
+
 from llm_providers import LLMProvider, Message
 
 
@@ -17,7 +19,7 @@ class GeminiProvider(LLMProvider):
         # Gemini 3.x uses thinking_level (low/medium/high). Low keeps voice latency down.
         self.thinking_level = thinking_level
 
-    def chat(self, system: str, messages: list[Message]) -> str:
+    def _request(self, system: str, messages: list[Message]):
         t = self._types
         contents = [
             t.Content(role="model" if m.role == "assistant" else "user",
@@ -30,8 +32,16 @@ class GeminiProvider(LLMProvider):
             max_output_tokens=self.max_tokens,
             thinking_config=(t.ThinkingConfig(thinking_level=self.thinking_level)
                              if self.thinking_level else None),
+            # no tools yet; also silences the SDK's AFC warning on every streamed call
+            automatic_function_calling=t.AutomaticFunctionCallingConfig(disable=True),
         )
-        resp = self._client.models.generate_content(
-            model=self.model, contents=contents, config=config,
-        )
+        return dict(model=self.model, contents=contents, config=config)
+
+    def chat(self, system: str, messages: list[Message]) -> str:
+        resp = self._client.models.generate_content(**self._request(system, messages))
         return (resp.text or "").strip()
+
+    def stream(self, system: str, messages: list[Message]) -> Iterator[str]:
+        for chunk in self._client.models.generate_content_stream(**self._request(system, messages)):
+            if chunk.text:
+                yield chunk.text

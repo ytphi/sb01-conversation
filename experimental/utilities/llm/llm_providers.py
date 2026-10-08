@@ -3,6 +3,8 @@ llm_providers.py  -  provider-agnostic chat interface (Gemini / DeepSeek / Claud
 
 Every provider takes the same inputs (system prompt + list of Message) and
 returns plain reply text, so the conversation loop never touches a vendor SDK.
+  chat(system, messages)   -> the whole reply
+  stream(system, messages) -> the reply as text deltas, as they arrive
 
 Provider SDKs are imported lazily: you only need the package for the
 provider you actually use (google-genai, openai, or anthropic).
@@ -11,6 +13,7 @@ provider you actually use (google-genai, openai, or anthropic).
 import importlib
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal
 
@@ -47,6 +50,10 @@ class LLMProvider(ABC):
     @abstractmethod
     def chat(self, system: str, messages: list[Message]) -> str:
         """Return the assistant reply for the given conversation."""
+
+    def stream(self, system: str, messages: list[Message]) -> Iterator[str]:
+        """Yield the reply as text deltas. Providers without streaming yield it whole."""
+        yield self.chat(system, messages)
 
 
 # name → (module, class). Modules live next to this file.
