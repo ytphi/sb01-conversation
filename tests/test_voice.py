@@ -668,81 +668,56 @@ class NoMemoryKeptPerReply(unittest.TestCase):
                 pass
 
 
-class SpeechLevel(unittest.TestCase):
-    """A quiet reply is turned up toward Edge TTS's level by one factor, and can never clip."""
+class OriginalVolumeIsKept(unittest.TestCase):
+    """Chatterbox audio is played at the amplitude the model generated: gain 1.0 in every language,
+    no matching to Edge TTS, no limiter."""
 
     @staticmethod
     def _tone(amplitude, seconds=1.0):
         return (amplitude * np.sin(np.arange(round(seconds * RATE)) * 0.05)).astype(np.float32)
 
-    def test_a_quiet_reply_is_brought_to_the_level_of_edge_tts(self):
-        quiet = self._tone(0.09)
-        loud = vc.ChatterboxVoice._levelled(quiet)
-        self.assertAlmostEqual(vc.ChatterboxVoice._speech_level(loud), vc.SPEECH_LEVEL, places=3)
-        self.assertLess(float(np.abs(loud).max()), vc.PEAK_CEILING)
-
-    def test_it_is_one_factor_for_the_whole_reply_so_only_the_loudness_changes(self):
-        quiet = np.concatenate((self._tone(0.09), np.zeros(RATE // 4, dtype=np.float32), self._tone(0.05)))
-        loud = vc.ChatterboxVoice._levelled(quiet)
-        moving = np.abs(quiet) > 1e-3
-        factors = loud[moving] / quiet[moving]
-        self.assertAlmostEqual(float(factors.min()), float(factors.max()), places=4)
-        self.assertEqual(len(loud), len(quiet))
-
-    def test_a_loud_moment_limits_how_far_it_is_turned_up(self):
-        quiet = self._tone(0.04)
-        quiet[1000:1100] = 0.6                               # one loud consonant
-        loud = vc.ChatterboxVoice._levelled(quiet)
-        self.assertAlmostEqual(float(np.abs(loud).max()), vc.PEAK_CEILING, places=4)
-        self.assertLess(vc.ChatterboxVoice._speech_level(loud), vc.SPEECH_LEVEL)
-
-    def test_it_is_never_more_than_doubled(self):
-        faint = self._tone(0.01)
-        self.assertAlmostEqual(float(np.abs(vc.ChatterboxVoice._levelled(faint)).max()), 0.02, places=4)
-
-    def test_speech_that_is_loud_enough_is_not_touched(self):
-        loud = self._tone(0.5)
-        self.assertIs(vc.ChatterboxVoice._levelled(loud), loud)
-
-    def test_what_the_robot_and_the_gesture_model_get_is_turned_up_alike_and_does_not_clip(self):
+    def _made(self, wave, language):
         engine = _Engine()
-        engine.bad = (self._tone(0.09, 2.0), RATE)
-        speech = _voice(engine).synthesize("A quiet reply for you.", "en")
-        robot = np.frombuffer(speech.pcm, dtype="<i2")
-        gesture = np.frombuffer(speech.gesture_pcm, dtype="<i2")
-        self.assertLess(int(np.abs(robot).max()), 32767 * vc.PEAK_CEILING + 1)
-        self.assertAlmostEqual(int(np.abs(robot).max()), int(np.abs(gesture).max()), delta=40)
-        self.assertGreater(int(np.abs(robot).max()), 32767 * 0.09 * 1.5)                # it was turned up
-        self.assertAlmostEqual(len(robot) / 16000, 2.0, places=2)                       # same length, same format
-        self.assertEqual(len(speech.pcm) % 2, 0)
+        engine.bad = (wave, RATE)
+        return _voice(engine).synthesize(REPLIES[language], language)
 
-    def test_the_ceiling_holds_in_the_audio_the_robot_plays_even_if_converting_raises_a_peak(self):
-        def overshooting(wave, rate, target):               # a converter whose output peaks 8% higher
-            return _to_pcm16(np.clip(wave * 1.08, -1, 1), rate, target)
+    def test_the_gain_is_exactly_one_in_english_spanish_and_chinese(self):
+        for language in ("en", "es", "zh"):
+            for amplitude in (0.02, 0.09, 0.5, 0.97):         # very quiet to nearly full scale
+                with self.subTest(language=language, amplitude=amplitude):
+                    wave = self._tone(amplitude, 2.0)
+                    speech = self._made(wave, language)
+                    self.assertEqual(speech.pcm, _to_pcm16(wave, RATE, 16000))        # byte for byte: nothing scaled
+                    self.assertEqual(speech.gesture_pcm, _to_pcm16(wave, RATE, 24000))
 
-        engine = _Engine()
-        engine.bad = (self._tone(0.09, 2.0), RATE)
-        speech = vc.ChatterboxVoice(synth=engine, to_pcm16=overshooting).synthesize("A quiet reply for you.", "en")
-        peak = int(np.abs(np.frombuffer(speech.pcm, dtype="<i2")).max())
-        self.assertLessEqual(peak, round(32767 * vc.PEAK_CEILING) + 1)
-        self.assertGreater(peak, 32767 * 0.09 * 1.08 * 1.5)                              # still turned up
+    def test_a_quiet_reply_stays_quiet_and_a_loud_one_stays_loud(self):
+        quiet = np.frombuffer(self._made(self._tone(0.05), "en").pcm, dtype="<i2")
+        loud = np.frombuffer(self._made(self._tone(0.97), "en").pcm, dtype="<i2")
+        self.assertAlmostEqual(int(np.abs(quiet).max()) / 32767, 0.05, places=3)
+        self.assertAlmostEqual(int(np.abs(loud).max()) / 32767, 0.97, places=3)
 
-    def test_speech_already_at_the_reference_level_is_passed_through_bit_for_bit(self):
-        engine = _Engine()                                   # its tone is louder than the reference
-        wave, rate = engine.synthesize("A reply that is loud enough.", "en")
-        speech = _voice(engine).synthesize("A reply that is loud enough.", "en")
-        self.assertEqual(speech.gesture_pcm, _to_pcm16(wave, rate, 24000))
-        self.assertEqual(speech.pcm, _to_pcm16(wave, rate, 16000))
+    def test_a_sample_at_full_scale_is_left_as_it_is(self):
+        wave = self._tone(0.6)
+        wave[1000] = 1.0                                     # as the multilingual engine sometimes produces
+        robot = np.frombuffer(self._made(wave, "es").pcm, dtype="<i2")
+        self.assertEqual(int(np.abs(robot).max()), 32767)    # not pulled down by a limiter
+        self.assertEqual(self._made(wave, "es").gesture_pcm, _to_pcm16(wave, RATE, 24000))
 
-    def test_edge_tts_audio_never_passes_through_the_gain(self):
-        engine = _Engine()
-        loop, robot = _loop(engine)
-        engine.fail = RuntimeError("boom")
-        with mock.patch.object(vc.ChatterboxVoice, "_levelled", side_effect=AssertionError("Edge TTS audio must not be scaled")):
-            _speak(loop, "Hello there, nice to meet you.", "en")
-        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
+    def test_the_gesture_copy_is_the_same_unchanged_waveform(self):
+        wave = self._tone(0.09, 2.0)
+        speech = self._made(wave, "en")
+        gesture = np.frombuffer(speech.gesture_pcm, dtype="<i2").astype(np.float32) / 32767
+        self.assertEqual(len(gesture), len(wave))
+        self.assertLess(float(np.abs(gesture - wave).max()), 1.0 / 32767)               # only 16-bit rounding
 
-    def test_sentences_joined_together_keep_their_own_balance(self):
+    def test_the_length_of_a_reply_spoken_in_one_piece_is_not_changed(self):
+        for language in ("en", "es", "zh"):
+            speech = self._made(self._tone(0.3, 2.5), language)
+            self.assertEqual(len(speech.pcm), 2 * round(2.5 * 16000))
+            self.assertEqual(len(speech.gesture_pcm), 2 * round(2.5 * RATE))
+            self.assertAlmostEqual(speech.seconds, 2.5, places=3)
+
+    def test_sentences_joined_together_are_not_scaled_either(self):
         engine = _Engine()
         real = engine.synthesize
 
@@ -752,10 +727,35 @@ class SpeechLevel(unittest.TestCase):
 
         engine.synthesize = quiet
         speech = _voice(engine).synthesize("First sentence of the reply. Second sentence of the reply.", "en", split=True)
-        samples = np.abs(np.frombuffer(speech.gesture_pcm, dtype="<i2").astype(np.float32))
+        samples = np.abs(np.frombuffer(speech.gesture_pcm, dtype="<i2").astype(np.float32)) / 32767
         half = len(samples) // 2
-        self.assertAlmostEqual(float(samples[:half].max() / samples[half:].max()), 2.0, places=1)
-        self.assertGreater(float(samples.max()), 32767 * 0.1 * 1.5)                     # and the reply was turned up
+        self.assertAlmostEqual(float(samples[:half].max()), 0.5 * 0.2, places=3)        # the stand-in tone is 0.5
+        self.assertAlmostEqual(float(samples[half:].max()), 0.5 * 0.1, places=3)
+
+    def test_there_is_no_volume_matching_code_or_setting(self):
+        for name in ("_levelled", "_speech_level", "_pcm_peak", "SPEECH_LEVEL", "PEAK_CEILING", "MAX_GAIN"):
+            self.assertFalse(hasattr(vc.ChatterboxVoice, name) or hasattr(vc, name), name)
+        with open(vc.__file__, encoding="utf-8") as source:
+            code = source.read()
+        self.assertNotIn("* np.float32(", code)                                          # nothing multiplies the reply
+        self.assertNotIn("SB01_CHATTERBOX_VOLUME", code)
+
+    def test_edge_tts_audio_goes_through_no_chatterbox_code(self):
+        loop, robot = _loop(engine=False)                    # no Chatterbox voice at all
+        base.tts_calls.clear()
+        with mock.patch.object(vc.ChatterboxVoice, "synthesize", side_effect=AssertionError("Edge TTS must not use Chatterbox")), \
+                mock.patch.object(vc.ChatterboxVoice, "_tidied", side_effect=AssertionError("Edge TTS must not use Chatterbox")):
+            _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)                # exactly Edge TTS's own audio
+        self.assertEqual(len(base.tts_calls), 1)
+
+    def test_edge_tts_fallback_audio_is_not_touched_either(self):
+        engine = _Engine()
+        loop, robot = _loop(engine)
+        engine.fail = RuntimeError("boom")
+        with mock.patch.object(vc.ChatterboxVoice, "_tidied", side_effect=AssertionError("Edge TTS must not use Chatterbox")):
+            _speak(loop, "Hello there, nice to meet you.", "en")
+        self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
 
 
 class VoiceSettings(unittest.TestCase):

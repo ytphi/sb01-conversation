@@ -43,21 +43,13 @@ Settings:
                                 (default 7 for both engines, 4 for nano, 5.5 for multilingual;
                                 it cannot be set below what the engines were measured to use)
 
-Two things are done to the audio, and they are different in kind:
-
-  1. Synthesis runs with PyTorch's gradient bookkeeping off (see
-     _no_gradients). This is a memory fix. It does not change the waveform the
-     model generates.
-  2. A final gain adjustment (see _levelled). This changes amplitude on
-     purpose and nothing else. Edge TTS at the robot's volume setting is the
-     listening level known to be right on the G1; the English Chatterbox engine
-     measured about 5 dB below it and the robot's volume is already at its
-     highest. So a whole reply is multiplied by one number toward Edge TTS's
-     speech level: never past 1 dB below full scale in the audio the robot
-     plays, never by more than 6 dB, never down. The audio the robot plays is
-     therefore not sample-for-sample what the model generated; it is that
-     waveform times one number. Timing, pauses and the voice are untouched.
-     Edge TTS audio never passes through this.
+Volume. Chatterbox audio keeps the amplitude the model generated, in every
+language: nothing here turns it up or down, limits its peaks, or matches it to
+Edge TTS. (Synthesis runs with PyTorch's gradient bookkeeping off, see
+_no_gradients; that is a memory fix and does not change the waveform.) What is
+done to the audio is only what playing it needs: conversion to 16 kHz 16-bit
+for the robot and to 24 kHz for the gesture model and, when sentences are
+synthesized one by one, trimming silence and a 5 ms fade at each join.
 """
 
 import contextlib
@@ -92,12 +84,6 @@ GPU_GB_USED_BY_ALL = 6.0
 GPU_GB_RESERVE = 1.5
 GPU_GB_PER_ENGINE = {name: used + GPU_GB_RESERVE for name, used in GPU_GB_USED.items()}
 
-# Final gain adjustment. The reference is Edge TTS as the robot plays it today:
-# its speech measures about -19 dBFS (see _speech_level). The English Chatterbox
-# engine comes out about 5 dB below that.
-SPEECH_LEVEL = 0.112        # -19 dBFS
-PEAK_CEILING = 0.89         # -1 dBFS: the loudest sample after turning up
-MAX_GAIN = 2.0              # +6 dB at most
 
 # Sentences synthesized one by one are joined with a pause. Each piece keeps at
 # most this much of its own silence and is faded at both ends, so a join can
@@ -367,11 +353,8 @@ class ChatterboxVoice:
             seconds = len(whole) / rate
             if not MIN_SECONDS <= seconds <= MAX_SECONDS:
                 raise VoiceUnavailable(f"the audio came out {seconds:.1f} s long, which cannot be right")
+            # The amplitude is the model's own: no gain, no limiter, no matching to Edge TTS.
             pcm = self._to_pcm16(whole, rate, PLAYBACK_RATE)
-            louder = self._levelled(whole, self._pcm_peak(pcm))
-            if louder is not whole:          # the gain was applied: convert the louder audio
-                whole = louder
-                pcm = self._to_pcm16(whole, rate, PLAYBACK_RATE)
             gesture_pcm = self._to_pcm16(whole, rate, GESTURE_RATE) if gesture_audio else None
         except VoiceUnavailable:
             raise
@@ -387,8 +370,7 @@ class ChatterboxVoice:
     @staticmethod
     def _no_gradients():
         """Synthesis with PyTorch's gradient bookkeeping off. A memory fix: the
-        waveform the model generates is the same sample for sample (the gain
-        adjustment afterwards is a separate step, see _levelled). Without this
+        waveform the model generates is the same sample for sample. Without this
         the English engine's watermarking step kept about 5 MB of ordinary
         memory with every sentence, for good.
         Where PyTorch is not installed (the offline tests) this does nothing."""
@@ -414,29 +396,6 @@ class ChatterboxVoice:
         if float(np.abs(wave).max()) < 1e-4:
             raise VoiceUnavailable("the voice returned silence")
         return wave
-
-    @staticmethod
-    def _speech_level(wave: np.ndarray) -> float:
-        """How loud the speech is: RMS of the samples that are not silence."""
-        spoken = wave[np.abs(wave) >= QUIET * float(np.abs(wave).max())]
-        return float(np.sqrt(np.mean(np.square(spoken, dtype=np.float64))))
-
-    @staticmethod
-    def _pcm_peak(pcm: bytes) -> float:
-        """The loudest sample of 16-bit audio, as a fraction of full scale."""
-        return float(np.abs(np.frombuffer(pcm, dtype="<i2").astype(np.int32)).max()) / 32767.0 if pcm else 0.0
-
-    @classmethod
-    def _levelled(cls, wave: np.ndarray, playback_peak: float = 0.0) -> np.ndarray:
-        """The final gain adjustment: the whole reply times one number, toward
-        Edge TTS's speech level. Amplitude only. Never turned down, never more
-        than MAX_GAIN, and never past the peak ceiling, counting the peak of
-        the converted audio the robot plays (`playback_peak`: converting to
-        16 kHz can raise a peak slightly). If the reply is already loud enough
-        it is returned untouched, the same object."""
-        peak = max(float(np.abs(wave).max()), playback_peak)
-        gain = min(SPEECH_LEVEL / cls._speech_level(wave), PEAK_CEILING / peak, MAX_GAIN)
-        return wave if gain <= 1.0 else wave * np.float32(gain)
 
     @staticmethod
     def _spoken_span(wave: np.ndarray) -> tuple[int, int]:

@@ -141,18 +141,12 @@ the 0.1.7 release on PyPI lacks options the speech framework uses. The first sta
   4.7 seconds after a reply was ready to be spoken (typically 2.3), with 3.6 of 6 GB in use. Spanish and Chinese stay on
   the processor and as slow as above. Putting both engines on a card needs clearly more than 8 GB, or the
   gesture server on another machine. Tested on that one laptop with a stand-in robot only.
-- **Volume matched to Edge TTS (on purpose).** Edge TTS at the robot's volume setting is the listening level
-  already confirmed as right on the G1, so it is the reference. The English Chatterbox voice measured about
-  5 dB quieter than that, and the robot's volume is already at its highest. Each Chatterbox reply therefore
-  gets a final gain adjustment: the whole reply is multiplied by one number toward Edge TTS's speech level,
-  never past 1 dB below full scale and never by more than 6 dB. This changes amplitude only; the voice, the
-  timing and the pauses are not touched, and Edge TTS audio is not touched. Measured after the adjustment,
-  Chatterbox was about 1 dB below Edge TTS. This was measured on the audio as it is sent to the robot; the
-  G1's speaker itself was not retested with Chatterbox.
-- **Two separate audio changes.** The inference and memory fix preserves the generated waveform. A separate
-  final gain adjustment changes amplitude only, matching Chatterbox more closely to the existing Edge TTS
-  speaker level. So the audio the robot plays is the generated waveform times one number, not a
-  sample-for-sample copy of it.
+- **Volume is left unchanged.** Chatterbox audio is played at the amplitude the model generates, in English,
+  Spanish and Chinese. Nothing turns it up or down, limits its peaks, or matches it to Edge TTS, and Edge TTS
+  audio is not touched either. Chatterbox's volume sounded acceptable in the team's G1 testing of the voice;
+  this integration itself has not been run on the robot. In offline testing some Spanish replies had a sample at full scale (2 of 12 replies, one sample each); no audible
+  distortion was established in that testing. Checking it on the robot's own speaker is still pending, and
+  volume limiting may be reconsidered only if that shows an audible problem.
 - **Monitoring:** monitoring is not included in this branch. Monitoring integration is a separate future step.
   No monitoring behavior was physically validated by this work.
 - **Status:** offline tests only. This has not been run on the physical robot.
