@@ -164,9 +164,11 @@ class VoicesAndLanguages(unittest.TestCase):
         self.assertEqual(script.VOICE_ES, "es-MX-DaliaNeural")
         self.assertEqual(script.VOICE_ZH, "zh-CN-XiaoxiaoNeural")
 
-    def test_all_three_languages_are_enabled(self):
-        self.assertEqual(set(script.LANGUAGE_NAMES.values()), {"English", "Spanish", "Chinese"})
-        self.assertIn("English, Spanish and Chinese", script.BASE_SYSTEM_PROMPT)
+    def test_every_chatterbox_multilingual_language_is_enabled(self):
+        self.assertTrue({"English", "Spanish", "Chinese"} <= set(script.LANGUAGE_NAMES.values()))
+        self.assertEqual(len(script.LANGUAGE_NAMES), 23)
+        for name in script.LANGUAGE_NAMES.values():
+            self.assertIn(name, script.BASE_SYSTEM_PROMPT)
 
     def test_no_chinese_limiter(self):
         with open(SCRIPT, encoding="utf-8") as handle:

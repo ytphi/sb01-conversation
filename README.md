@@ -105,6 +105,34 @@ python3 scripts/sb01_conversation.py en0
 
 The robot will greet you and start listening. Press `Ctrl+C` to stop — it will save a summary of the conversation automatically.
 
+### Speech recognition — Whisper on the PC
+
+The robot's microphones are streamed to the PC, where Silero VAD finds the end of each
+turn (500 ms of silence) and faster-whisper transcribes it: the same code and the same
+`experimental/speech-framework/config.yaml` (`stt:` section) as `run_robot.py`.
+Needs `pip install faster-whisper silero-vad pyyaml` (in `experimental/speech-framework/requirements.txt`).
+The first start downloads the Whisper model.
+
+| Setting | Effect |
+|---|---|
+| `SB01_STT=g1-mic` *(default, from `stt.source`)* | robot mics → Whisper on the PC |
+| `SB01_STT=pc-mic` | a microphone on the PC → Whisper |
+| `SB01_STT=g1-asr` | the robot's onboard ASR, as before (gives emotion tags; Whisper does not) |
+| `SB01_WHISPER_MODEL=large-v3-turbo` | another Whisper model (default `small`) |
+| `SB01_WHISPER_LANGUAGE=en` | fix the language instead of detecting it per utterance |
+
+If Whisper cannot start, the program says why and uses the onboard ASR.
+
+**Languages.** The robot converses in any of Chatterbox Multilingual's 23 languages (`teleop/languages.py`):
+Arabic, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Italian, Japanese,
+Korean, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Turkish.
+With Whisper listening, Whisper's own language detection picks the reply language, but only when it is at
+least 70 % sure (`SB01_LANGUAGE_CONFIDENCE=0.7`) and the phrase is clear (a greeting, or 3+ words / 4+
+characters); otherwise the robot stays in the language it last spoke. The reply is spoken in that
+language by Chatterbox (or the matching Edge voice), unless its writing system shows another one.
+Reply timings also come from that config: partial-result wait `stt.g1_asr.debounce_s` (0.8 s),
+after a reply at most its length plus `robot.playback_grace_s` (0.5 s), then `robot.echo_tail_s` (0.3 s).
+
 ### Optional — the Chatterbox voice
 
 By default the robot speaks with Microsoft Edge TTS. To use the Chatterbox voice from
