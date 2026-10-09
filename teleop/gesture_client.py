@@ -63,10 +63,17 @@ ARM_JOINTS   = tuple(range(15, 29))   # left 15-21, right 22-28 (arm7 layout)
 WEIGHT_JOINT = 29                     # kNotUsedJoint: arm_sdk blend weight, 0 = robot's own pose
 ARM_KP = 45.0
 ARM_KD = 1.2
-# rt/arm_sdk also takes the waist. Unitree's own arm_sdk programs always send it
-# with gains at a fixed position, so it is held where it was when the arms were
-# taken instead of being left at zero gains while the weight is 1.
-WAIST_HOLD = True
+# rt/arm_sdk also takes the waist. Unitree's own arm_sdk example sends it with
+# gains at a fixed position, so by default it is held where it was when the arms
+# were taken. RoboGesture itself sends the arms only and leaves the waist to the
+# robot's balance controller: SB01_GESTURE_WAIST=free does the same. Use it if
+# the robot leans or loses balance while gesturing: a waist that is not
+# mechanically locked is part of how the robot balances, and holding it still
+# takes that away for as long as the arms are held.
+WAIST_MODE = os.environ.get("SB01_GESTURE_WAIST", "hold").strip().lower() or "hold"
+if WAIST_MODE not in ("hold", "free"):
+    raise ValueError(f"SB01_GESTURE_WAIST is {WAIST_MODE!r}; use hold or free")
+WAIST_HOLD = WAIST_MODE == "hold"
 WAIST_KP = 60.0   # g1_arm7_sdk_dds_example gains
 WAIST_KD = 1.5
 
@@ -224,6 +231,8 @@ class GestureClient:
         self._sub = ChannelSubscriber("rt/lowstate", LowState_)
         self._sub.Init(self._lowstate_callback, 10)
 
+        print("[gesture] waist: " + ("held in place while the arms are held (SB01_GESTURE_WAIST=free leaves it to the robot)"
+                                     if WAIST_HOLD else "left to the robot's own balance controller; only the arms are commanded"))
         atexit.register(self.close)
         self._install_signal_handlers()
 
