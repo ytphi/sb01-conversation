@@ -817,6 +817,27 @@ class WarmToneWhenAskedFor(unittest.TestCase):
         self.assertEqual(speech.pcm, _to_pcm16(shaped, RATE, 16000))
         self.assertEqual(speech.gesture_pcm, _to_pcm16(shaped, RATE, 24000))
 
+    def _loaded_by_the_program(self):
+        loop, _ = _loop(engine=False)
+        out = io.StringIO()
+        with mock.patch.object(script, "VOICE_BACKEND", "chatterbox"),                 mock.patch.object(script, "ChatterboxVoice", lambda: vc.ChatterboxVoice(synth=_Engine(), to_pcm16=_to_pcm16, device="auto")),                 contextlib.redirect_stdout(out):
+            loop._load_voice()
+        return loop, out.getvalue()
+
+    def test_the_conversation_program_uses_the_warm_tone_without_being_asked(self):
+        loop, printed = self._loaded_by_the_program()
+        self.assertEqual(loop.voice.tone, "warm")
+        self.assertIn("[voice] tone: warm", printed)
+
+    def test_plain_gives_the_voice_as_the_model_makes_it(self):
+        os.environ["SB01_CHATTERBOX_TONE"] = "plain"
+        loop, printed = self._loaded_by_the_program()
+        self.assertEqual(loop.voice.tone, "")
+        self.assertIn("[voice] tone: plain", printed)
+        wave = self._speechlike()
+        loop.voice._synth.bad = (wave, RATE)
+        self.assertEqual(loop.voice.synthesize(REPLIES["en"], "en").pcm, _to_pcm16(wave, RATE, 16000))
+
     def test_a_tone_that_does_not_exist_is_refused_in_plain_words(self):
         os.environ["SB01_CHATTERBOX_TONE"] = "sparkly"
         with self.assertRaises(vc.VoiceUnavailable) as refused:

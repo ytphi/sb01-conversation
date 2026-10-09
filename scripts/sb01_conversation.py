@@ -61,7 +61,7 @@ from teleop.face_id import FaceIdentifier
 from teleop.memory_manager import MemoryManager
 from teleop.gesture_client import GestureClient, GESTURE_SAMPLE_RATE
 from teleop import gesture_cues
-from teleop.voice_chatterbox import ChatterboxVoice, VoiceUnavailable
+from teleop.voice_chatterbox import ChatterboxVoice, VoiceUnavailable, chosen_tone
 from teleop import stt_whisper
 from teleop import languages
 
@@ -98,6 +98,9 @@ THINKING_POSE_SECONDS = 6.0   # longest the pose is held if the reply is slow
 # With the Chatterbox voice the pose also covers the seconds it takes to
 # synthesize the reply, so it may be held this long before the arms go back.
 THINKING_POSE_VOICE_SECONDS = 20.0
+# The Chatterbox voice is given the "warm" tone (warmer and about 5 dB louder,
+# see teleop/voice_chatterbox.py) unless SB01_CHATTERBOX_TONE=plain is set.
+VOICE_TONE_DEFAULT = "warm"
 # A Chatterbox reply takes seconds to synthesize. SB01_FILLER=1 has the robot say
 # a short, friendly line straight away, in the same voice, while the reply is
 # being made: one kind after a question, another after anything else. The lines
@@ -475,6 +478,7 @@ class SB01ConversationLoop:
         print("[voice] loading the Chatterbox voice (this can take a minute the first time)...")
         try:
             voice = ChatterboxVoice()
+            voice.tone = chosen_tone(VOICE_TONE_DEFAULT)
             voice.load()
         except VoiceUnavailable as exc:
             print(f"[voice] Chatterbox is NOT in use: {exc}")
@@ -487,6 +491,8 @@ class SB01ConversationLoop:
             print(f"[voice] {voice.device_note}")
         if voice.device == "cpu":
             print("[voice] on the processor replies are slow to synthesize: expect a pause before each one")
+        print("[voice] tone: " + ("warm (warmer and louder; SB01_CHATTERBOX_TONE=plain gives the voice as the model makes it)"
+                                  if voice.tone == "warm" else "plain, the voice as the model makes it"))
         if FILLER:
             self._make_fillers()
 

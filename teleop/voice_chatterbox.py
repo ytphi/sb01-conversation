@@ -42,7 +42,8 @@ Settings:
   SB01_CHATTERBOX_GPU_GB        free graphics memory required before cuda is used
                                 (default 7 for both engines, 4 for nano, 5.5 for multilingual;
                                 it cannot be set below what the engines were measured to use)
-  SB01_CHATTERBOX_TONE          unset (default): the voice as the model makes it | warm
+  SB01_CHATTERBOX_TONE          warm | plain (the voice as the model makes it). Unset: plain here,
+                                warm in the conversation program
 
 Volume. Chatterbox audio normally keeps exactly the amplitude the model
 generated, in every language: nothing here turns it up, matches it to Edge TTS,
@@ -60,11 +61,13 @@ under full scale (see _clip_guard). The robot audio and the gesture copy get
 the same number, Speech.scale records it, and the conversation program prints
 it. A reply within range is never touched: its scale is exactly 1.0.
 
-Tone, only when asked for. SB01_CHATTERBOX_TONE=warm changes how every reply
-sounds, on purpose: more body in the low part of the voice, slightly less edge
-at the top, and about 5 dB louder, with the loudest moments held under a
-ceiling so the lift cannot clip (see warm_tone). Timing and length are not
-changed. Without the setting none of this runs and the paragraphs above hold.
+Tone. The "warm" tone changes how every reply sounds, on purpose: more body in
+the low part of the voice, slightly less edge at the top, and about 5 dB
+louder, with the loudest moments held under a ceiling so the lift cannot clip
+(see warm_tone). Timing and length are not changed. A ChatterboxVoice made
+here has no tone unless SB01_CHATTERBOX_TONE=warm is set; the conversation
+program asks for warm unless SB01_CHATTERBOX_TONE=plain is set. With no tone
+none of this runs and the paragraphs above hold.
 """
 
 import contextlib
@@ -113,6 +116,7 @@ QUIET = 0.02                # of the loudest sample: below this is silence
 SAFE_PEAK = 0.998
 # SB01_CHATTERBOX_TONE=warm (chosen by ear from samples on 2026-10-09):
 TONES = ("warm",)
+PLAIN_TONE = ("plain", "off", "none")       # ways of asking for no tone at all
 WARM_LOW_DB = 3.5           # more body: this much more below about 300 Hz
 WARM_HIGH_DB = -2.0         # less edge: this much less above about 5 kHz
 WARM_LOUDER_DB = 5.0        # everything this much louder ...
@@ -129,11 +133,16 @@ class VoiceUnavailable(Exception):
     """Chatterbox cannot be used right now; the message says why in plain words."""
 
 
-def chosen_tone() -> str:
-    """Empty for the voice as the model makes it, or the tone SB01_CHATTERBOX_TONE names."""
+def chosen_tone(default: str = "") -> str:
+    """The tone SB01_CHATTERBOX_TONE names, or `default` when it is not set.
+    Empty means the voice as the model makes it; "plain" asks for that by name."""
     tone = os.environ.get("SB01_CHATTERBOX_TONE", "").strip().lower()
-    if tone and tone not in TONES:
-        raise VoiceUnavailable(f"SB01_CHATTERBOX_TONE is {tone!r}; use {' or '.join(TONES)}, or leave it unset")
+    if not tone:
+        return default
+    if tone in PLAIN_TONE:
+        return ""
+    if tone not in TONES:
+        raise VoiceUnavailable(f"SB01_CHATTERBOX_TONE is {tone!r}; use {' or '.join(TONES)}, or plain")
     return tone
 
 

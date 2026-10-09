@@ -459,6 +459,10 @@ languages still use Multilingual. So this branch is now the fast branch plus the
 `multilingual` in that file. The first bullet under "What changed" and the timings table describe
 English on Multilingual, as it was measured.
 
+**Also later the same day: the warm tone is on by default** in the conversation program on this branch.
+`SB01_CHATTERBOX_TONE=plain` gives the voice as the model makes it. The waiting line and the idle
+movement stay off unless their settings are added.
+
 **What changed**
 
 - **English on the Multilingual engine** (`experimental/speech-framework/config.yaml`). English, Spanish
