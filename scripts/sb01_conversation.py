@@ -112,6 +112,18 @@ PRELOAD_FILES = [
     os.path.join(os.path.dirname(__file__), "../unitree_sdk2_python/README.md"),
     os.path.join(os.path.dirname(__file__), "../unitree_sdk2_python/example/g1/readme.md"),
 ]
+# Course material for the teaching assistant. Every .md or .txt file in this
+# folder is read at startup, in name order, and given to Claude with each
+# question. SB01_CLASS_DIR names another folder; an empty or missing folder
+# simply means no course material.
+CLASS_DIR = os.environ.get("SB01_CLASS_DIR", "").strip() or os.path.join(os.path.dirname(__file__), "..", "reference", "class")
+CLASS_FILE_MAX_CHARS = 8000       # per file; anything past this is left out, and the startup line says so
+CLASS_NOTE = (
+    "Course material for the class you assist with, from the instructor's syllabus and lecture slides. "
+    "Use it to answer questions about the class, and say which week something is from when that helps. "
+    "If it does not cover a question about the class, say you are not sure and suggest checking Canvas "
+    "or asking the instructor. Never guess a date, a grade or a policy."
+)
 
 WEATHER_KEYWORDS = {
     "weather", "temperature", "temp", "rain", "raining", "sunny", "sunshine",
@@ -249,7 +261,32 @@ def load_context() -> str:
                 parts.append(f"--- {path} ---\n{f.read(3000)}")
         except Exception as exc:
             parts.append(f"--- {path} ---\n[Could not read: {exc}]")
+    parts += load_class_material()
     return "\n\n".join(parts)
+
+
+def load_class_material(folder: str | None = None) -> list:
+    """The course material, one part per file, with a note on how to use it first."""
+    folder = os.path.abspath(folder or CLASS_DIR)
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".md", ".txt")))
+    except OSError:
+        return []
+    parts = []
+    for name in names:
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                text = f.read().strip()
+        except Exception as exc:
+            print(f"[{ROBOT_NAME}] course material: could not read {name} ({exc})")
+            continue
+        if not text:
+            continue
+        kept = text[:CLASS_FILE_MAX_CHARS]
+        cut = f", the last {len(text) - len(kept)} left out" if len(kept) < len(text) else ""
+        print(f"[{ROBOT_NAME}] course material: {name} ({len(kept)} chars{cut})")
+        parts.append(f"--- course material: {name} ---\n{kept}")
+    return [f"=== {CLASS_NOTE} ==="] + parts if parts else []
 
 
 # ── name ──────────────────────────────────────────────────────────────────────
