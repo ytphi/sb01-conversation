@@ -2,9 +2,9 @@
 """
 test_gesture_waist.py  -  offline check of what the gesture client sends to the waist
 
-By default the waist is held where it was when the arms were taken. With
-SB01_GESTURE_WAIST=free nothing is sent to the waist at all (zero gains, as in
-RoboGesture's own robot code), so the robot's balance controller keeps it.
+By default nothing is sent to the waist at all (zero gains, as in RoboGesture's
+own robot code), so the robot's balance controller keeps it. With
+SB01_GESTURE_WAIST=hold the waist is held where it was when the arms were taken.
 
 No robot, no DDS, no sidecar: the same stand-ins as tests/test_gesture_pose.py.
 This shows what is commanded, not how the real robot balances.
@@ -67,9 +67,9 @@ for _name in [n for n in dir(pose.GesturePose) if n.startswith("test_")]:
     setattr(_WaistCase, _name, None)
 
 
-class WaistHeldByDefault(_WaistCase):
+class WaistHeldWhenAskedFor(_WaistCase):
     __test__ = True
-    MODE = None
+    MODE = "hold"
 
     def test_the_waist_is_held_with_gains_at_one_position(self):
         self._one_pose()
@@ -84,9 +84,9 @@ class WaistHeldByDefault(_WaistCase):
         self.assertIn("waist: held in place", out.getvalue())
 
 
-class WaistLeftToTheRobot(_WaistCase):
+class WaistLeftToTheRobotByDefault(_WaistCase):
     __test__ = True
-    MODE = "free"
+    MODE = None
 
     def test_nothing_is_sent_to_the_waist(self):
         self._one_pose()
@@ -104,6 +104,10 @@ class WaistLeftToTheRobot(_WaistCase):
         with redirect_stdout(out):
             self.module.GestureClient("http://127.0.0.1:9").close()
         self.assertIn("only the arms are commanded", out.getvalue())
+
+
+class WaistFreeByName(WaistLeftToTheRobotByDefault):
+    MODE = "free"
 
 
 class WaistSetting(unittest.TestCase):
