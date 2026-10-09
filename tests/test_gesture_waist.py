@@ -2,10 +2,10 @@
 """
 test_gesture_waist.py  -  offline check of what the gesture client sends to the waist
 
-The waist is always held, with gains, where it was when the arms were taken.
-Sending nothing to it ("free") was tried on the physical G1 on 2026-10-09 and
-the torso bent far backward, so SB01_GESTURE_WAIST=free is refused: the waist
-is held all the same and the startup output says so.
+By default the waist is held, with gains, where it was when the arms were taken.
+SB01_GESTURE_WAIST=free is kept for experiments: nothing is sent to the waist
+(zero gains). On the physical G1 that let the torso lean back (2026-10-09), so
+the startup output carries a warning when it is set.
 
 No robot, no DDS, no sidecar: the same stand-ins as tests/test_gesture_pose.py.
 This shows what is commanded, not how the real robot balances.
@@ -84,21 +84,47 @@ class WaistIsHeld(_WaistCase):
     def test_startup_says_the_waist_is_held(self):
         printed = self._startup()
         self.assertIn("waist: held in place", printed)
-        self.assertNotIn("NOT used", printed)
+        self.assertNotIn("WARNING", printed)
 
 
-class AskingForAFreeWaistIsRefused(_WaistCase):
+class FreeWaistForExperiments(_WaistCase):
     __test__ = True
     MODE = "free"
 
-    def test_the_waist_is_held_all_the_same(self):
-        self._held_throughout()
+    def test_nothing_is_sent_to_the_waist(self):
+        accepted, _, printed = self._play(seconds=0.5)
+        self.assertTrue(accepted, printed)
+        self.assertGreater(len(self.waist), 30)
+        for frame in self.waist:
+            self.assertEqual(frame, [(0.0, 0.0, 0.0)] * 3)
 
-    def test_startup_says_the_setting_is_not_used_and_why(self):
+    def test_startup_warns_what_it_did_on_the_robot(self):
         printed = self._startup()
-        self.assertIn("SB01_GESTURE_WAIST=free is NOT used", printed)
-        self.assertIn("bend far backward", printed)
-        self.assertIn("waist: held in place", printed)
+        self.assertIn("WARNING: SB01_GESTURE_WAIST=free", printed)
+        self.assertIn("lean back", printed)
+        self.assertNotIn("waist: held in place", printed)
+
+
+class WaistSetting(unittest.TestCase):
+    def test_holding_is_the_default(self):
+        saved = os.environ.pop("SB01_GESTURE_WAIST", None)
+        try:
+            self.assertTrue(base._load_client().WAIST_HOLD)
+        finally:
+            if saved is not None:
+                os.environ["SB01_GESTURE_WAIST"] = saved
+
+    def test_an_unknown_value_is_refused(self):
+        saved = os.environ.get("SB01_GESTURE_WAIST")
+        os.environ["SB01_GESTURE_WAIST"] = "wobbly"
+        try:
+            with self.assertRaises(ValueError) as refused:
+                base._load_client()
+            self.assertIn("SB01_GESTURE_WAIST", str(refused.exception))
+        finally:
+            os.environ.pop("SB01_GESTURE_WAIST", None)
+            if saved is not None:
+                os.environ["SB01_GESTURE_WAIST"] = saved
 
 
 if __name__ == "__main__":

@@ -64,14 +64,18 @@ WEIGHT_JOINT = 29                     # kNotUsedJoint: arm_sdk blend weight, 0 =
 ARM_KP = 45.0
 ARM_KD = 1.2
 # rt/arm_sdk also takes the waist: while the blend weight is 1, the waist does
-# what this client sends it. It is therefore ALWAYS held, with the gains of
-# Unitree's own arm_sdk example, where it was when the arms were taken.
-# Sending nothing to the waist ("free") was tried on the physical G1 on
-# 2026-10-09: the torso bent far backward while the robot spoke. With zero
-# gains the waist is not handed to the robot's balance controller, it is simply
-# let go. SB01_GESTURE_WAIST=free is therefore refused, and the waist is held.
+# what this client sends it. By default it is held, with the gains of Unitree's
+# own arm_sdk example, where it was when the arms were taken.
+#
+# SB01_GESTURE_WAIST=free is for experiments only: nothing is sent to the waist
+# (zero gains). It does NOT hand the waist to the robot's balance controller.
+# Tried on the physical G1 on 2026-10-09, the waist was simply let go: the torso
+# leaned back and the hips came forward while the robot spoke. Use it only on
+# the tether, with someone at the stop, knowing that is what it does.
 WAIST_MODE = os.environ.get("SB01_GESTURE_WAIST", "hold").strip().lower() or "hold"
-WAIST_HOLD = True
+if WAIST_MODE not in ("hold", "free"):
+    raise ValueError(f"SB01_GESTURE_WAIST is {WAIST_MODE!r}; use hold or free")
+WAIST_HOLD = WAIST_MODE == "hold"
 WAIST_KP = 60.0   # g1_arm7_sdk_dds_example gains
 WAIST_KD = 1.5
 
@@ -229,10 +233,12 @@ class GestureClient:
         self._sub = ChannelSubscriber("rt/lowstate", LowState_)
         self._sub.Init(self._lowstate_callback, 10)
 
-        if WAIST_MODE != "hold":
-            print(f"[gesture] SB01_GESTURE_WAIST={WAIST_MODE} is NOT used: letting the waist go made the torso bend "
-                  f"far backward on the robot. The waist is held.")
-        print("[gesture] waist: held in place while the arms are held")
+        if WAIST_HOLD:
+            print("[gesture] waist: held in place while the arms are held")
+        else:
+            print("[gesture] WARNING: SB01_GESTURE_WAIST=free. Nothing is sent to the waist while gesturing. On this robot "
+                  "that let the torso lean back and the hips come forward (2026-10-09). Experiments only: tether on, "
+                  "someone at the stop. Remove the setting to hold the waist.")
         atexit.register(self.close)
         self._install_signal_handlers()
 
