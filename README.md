@@ -108,7 +108,7 @@ The robot will greet you and start listening. Press `Ctrl+C` to stop — it will
 ### Speech recognition — Whisper on the PC
 
 The robot's microphones are streamed to the PC, where Silero VAD finds the end of each
-turn (500 ms of silence) and faster-whisper transcribes it: the same code and the same
+turn (1 s of silence, `stt.vad.min_silence_ms`) and faster-whisper transcribes it: the same code and the same
 `experimental/speech-framework/config.yaml` (`stt:` section) as `run_robot.py`.
 Needs `pip install faster-whisper silero-vad pyyaml` (in `experimental/speech-framework/requirements.txt`).
 The first start downloads the Whisper model.
