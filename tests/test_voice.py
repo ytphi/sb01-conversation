@@ -566,9 +566,7 @@ class WhichEngineSpeaksWhichLanguage(unittest.TestCase):
         with open(os.path.join(vc.FRAMEWORK_DIR, "config.yaml"), encoding="utf-8") as settings:
             text = settings.read()
         found = dict(re.findall(r"^    (\w+): \{ engine: (\w+),", text, flags=re.MULTILINE))
-        # On this branch English ships on the multilingual engine too; the other
-        # tests keep SHIPPED_LANGUAGES (English on nano) to cover that routing.
-        self.assertEqual(found, {language: "multilingual" for language in SHIPPED_LANGUAGES})
+        self.assertEqual(found, {language: entry["engine"] for language, entry in SHIPPED_LANGUAGES.items()})
 
     def test_by_default_every_engine_is_on_the_processor(self):
         with _real_framework(dict(SHIPPED)) as spoken:

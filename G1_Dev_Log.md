@@ -451,6 +451,14 @@ the real Chatterbox models, the real gesture server and a stand-in robot.
 **Not run on the physical G1.** Everything here was checked with the real Chatterbox models, the real
 gesture server and gesture client, and a stand-in robot (no DDS), on a laptop with a 6 GB RTX 3050.
 
+**Changed later the same day: English is back on the Nano engine.** After the fast branch ran well on the
+robot, `config.yaml` on this branch routes English to Nano again, for speed (about 2 to 3 s to the first
+words on the laptop's card, against about 6 to 12 s on Multilingual). Spanish, Chinese and the other
+languages still use Multilingual. So this branch is now the fast branch plus the opt-in extras below
+(waiting line, idle movement, warm tone). To hear English on Multilingual again, set `en` back to
+`multilingual` in that file. The first bullet under "What changed" and the timings table describe
+English on Multilingual, as it was measured.
+
 **What changed**
 
 - **English on the Multilingual engine** (`experimental/speech-framework/config.yaml`). English, Spanish
