@@ -77,10 +77,48 @@ GESTURE_URL = os.environ.get("SB01_GESTURE_URL", "").strip()
 # Motion is delayed by the speaker's measured start-up time so it lands on the
 # first sound. Never by more than this, in case that measurement is off.
 AUDIO_LATENCY_MAX = 0.5
+# Head start for the speech motion, in seconds: SB01_GESTURE_LEAD=0.3 plays each
+# movement 0.3 s earlier against the voice, for when the emphasis looks late.
+# The audio is held back by up to that long. Teaching gestures stay on their word.
+GESTURE_LEAD_MAX = 0.6
+try:
+    GESTURE_LEAD = min(max(float(os.environ.get("SB01_GESTURE_LEAD", "") or 0.0), 0.0), GESTURE_LEAD_MAX)
+except ValueError:
+    GESTURE_LEAD = 0.0
 # Fixed poses between speech, off unless listed: SB01_GESTURE_POSES=thinking raises
 # the "thinking" pose while the reply is being worked out. Needs SB01_GESTURE_URL.
 GESTURE_POSES = {p.strip() for p in os.environ.get("SB01_GESTURE_POSES", "").split(",") if p.strip()}
 THINKING_POSE_SECONDS = 6.0   # longest the pose is held if the reply is slow
+# With the Chatterbox voice the pose also covers the seconds it takes to
+# synthesize the reply, so it may be held this long before the arms go back.
+THINKING_POSE_VOICE_SECONDS = 20.0
+# A Chatterbox reply takes seconds to synthesize. SB01_FILLER=1 has the robot say
+# a short, friendly line straight away, in the same voice, while the reply is
+# being made: one kind after a question, another after anything else. The lines
+# are synthesized once at startup.
+FILLER = os.environ.get("SB01_FILLER", "").strip() == "1"
+FILLER_MIN_WORDS = 4          # none before the answer to a greeting or a one-word phrase
+FILLERS = {
+    "en": {"question": ("That's a great question. Let me think about how to answer that.",
+                        "Ooh, good question. Give me a moment to think about that one."),
+           "other":    ("Hmm, let me think about that for a moment.",
+                        "Okay, give me just a moment.")},
+    "es": {"question": ("Qué buena pregunta. Déjame pensar cómo responderla.",),
+           "other":    ("Mmm, déjame pensarlo un momento.",)},
+    "zh": {"question": ("这是个好问题。让我想想怎么回答。",),
+           "other":    ("嗯，让我想一想。",)},
+}
+# Speech recognition often leaves the question mark out, so a phrase also counts
+# as a question when it opens with a question word (or, in Chinese, contains one).
+QUESTION_OPENERS = re.compile(
+    r"^\W*(what|why|how|who|whom|whose|when|where|which|can|could|do|does|did|is|are|am|was|were|will|would|should|may|"
+    r"qué|que|cómo|como|por qué|cuándo|cuando|dónde|donde|quién|quien|cuál|cual|cuánto|cuanto|puedes|puede|podrías)\b",
+    re.IGNORECASE)
+QUESTION_MARKS = ("?", "？", "¿", "吗", "什么", "怎么", "为什么", "谁", "哪", "多少", "几", "能不能", "是不是", "可不可以")
+
+
+def is_question(text: str) -> bool:
+    return any(mark in text for mark in QUESTION_MARKS) or bool(QUESTION_OPENERS.search(text))
 # Teaching gestures, off unless SB01_GESTURE_CUES=1: Claude may mark a word in its
 # reply ("look at the [point] diagram") and the arm gesture arrives on that word.
 # SB01_BOARD_SIDE=left|right says where the board or screen is, for pointing.
@@ -318,6 +356,10 @@ class SB01ConversationLoop:
         self._spoken_words: list = []   # (start seconds, word) of the current reply
         self.voice: ChatterboxVoice | None = None   # set in setup() when SB01_VOICE=chatterbox loads
         self._voice_failures = 0                    # Chatterbox failures in a row
+        self._thinking = None                       # a thinking pose kept up while Chatterbox synthesizes
+        self._wait_over = threading.Event()         # the reply's audio is ready: nothing more is started to fill the wait
+        self._fillers: dict = {}                    # language -> [(playback PCM, gesture PCM or None)]
+        self._filler_turn = 0
         self._words_estimated = False               # word times of the current reply are estimates
         self._told_estimate = False
         self.audio       = AudioClient()
@@ -383,6 +425,39 @@ class SB01ConversationLoop:
             print(f"[voice] {voice.device_note}")
         if voice.device == "cpu":
             print("[voice] on the processor replies are slow to synthesize: expect a pause before each one")
+        if FILLER:
+            self._make_fillers()
+
+    def _make_fillers(self):
+        """Synthesize the "let me think" lines once, so they play with no wait."""
+        print("[voice] preparing the short lines said while a reply is being made...")
+        try:
+            for language, kinds in FILLERS.items():
+                self._fillers[language] = {}
+                for kind, lines in kinds.items():
+                    made = [self.voice.synthesize(line, language, gesture_audio=bool(GESTURE_URL)) for line in lines]
+                    self._fillers[language][kind] = [(speech.pcm, speech.gesture_pcm) for speech in made]
+        except VoiceUnavailable as exc:
+            self._fillers = {}
+            print(f"[voice] those lines could not be made ({exc}); replies will follow a silent pause")
+            return
+        print(f"[voice] {sum(len(lines) for kinds in self._fillers.values() for lines in kinds.values())} lines ready")
+
+    def _pick_filler(self, heard: str):
+        """A prepared line for the language the reply will be in, or None."""
+        if self.voice is None or not self._fillers:
+            return None
+        if len(heard.split()) < FILLER_MIN_WORDS and sum('一' <= c <= '鿿' for c in heard) < 6:
+            return None
+        language = self.language
+        spoken = detect_language(heard)
+        if spoken != language and is_clear_language(heard, spoken):
+            language = spoken                        # the reply will switch to it (see _ask_claude)
+        lines = self._fillers.get(language, {}).get("question" if is_question(heard) else "other")
+        if not lines:
+            return None
+        self._filler_turn += 1
+        return lines[self._filler_turn % len(lines)]
 
     def setup(self):
         self._load_voice()
@@ -533,24 +608,61 @@ class SB01ConversationLoop:
         for how long the speaker has recently taken to start playing."""
         recent = sorted(self._audio_latencies)
         latency = recent[len(recent) // 2] if recent else 0.0
+        wait = min(latency, AUDIO_LATENCY_MAX) - GESTURE_LEAD
+        self.gestures.begin(max(0.0, wait))
+        if wait < 0.0:
+            time.sleep(-wait)                # the motion gets its head start before the audio is sent
         self._play_called = time.time()
-        self.gestures.begin(min(latency, AUDIO_LATENCY_MAX))
 
-    def _start_thinking(self) -> threading.Thread | None:
-        """Raise the "thinking" pose while the reply is worked out. It is asked
-        for beside the Claude request, so the reply is not kept waiting for it."""
-        if not self.gestures or "thinking" not in GESTURE_POSES:
+    def _start_thinking(self, heard: str = "") -> threading.Thread | None:
+        """What the robot does while the reply is worked out: a short spoken
+        line (Chatterbox voice, SB01_FILLER=1), then a pose if one is set. It
+        runs beside the Claude request, so the reply is not kept waiting."""
+        pose = next((name for name in ("hips", "thinking", "idle") if name in GESTURE_POSES), None) if self.gestures else None
+        filler = self._pick_filler(heard) if FILLER else None
+        if pose is None and filler is None:
             return None
-        thread = threading.Thread(target=self.gestures.pose, args=("thinking", THINKING_POSE_SECONDS), daemon=True)
+        self._wait_over.clear()
+        thread = threading.Thread(target=self._while_waiting, args=(filler, pose), daemon=True)
         thread.start()
         return thread
 
+    def _while_waiting(self, filler, pose):
+        try:
+            if filler is not None:
+                self.speaking.set()
+                self.audio.LedControl(0, 0, 128)
+                self._play(filler[0], filler[1], [])
+            if pose is not None and not self._wait_over.is_set():
+                seconds = THINKING_POSE_VOICE_SECONDS if self.voice is not None else THINKING_POSE_SECONDS
+                self.gestures.pose(pose, seconds)
+        except Exception as exc:
+            print(f"[{ROBOT_NAME}] (while waiting for the reply: {exc})")
+            if self.gestures:
+                self.gestures.stop()
+
     def _stop_thinking(self, thread: threading.Thread | None):
-        """The reply is in: the arm starts back down while the speech is synthesized."""
+        """The wait is over: nothing more is started, a line being said is
+        allowed to finish, and a pose starts back to rest."""
         if thread is None:
             return
+        self._wait_over.set()
         thread.join()                    # the gesture client takes one call at a time
-        self.gestures.finish_pose()
+        if self.gestures:
+            self.gestures.finish_pose()
+
+    def _reply_ready(self, thread: threading.Thread | None):
+        """Claude's reply is in. With Edge TTS the audio follows within about a
+        second, so the arms start back now. Chatterbox takes seconds to
+        synthesize: the pose is kept until _speak() has the audio."""
+        if self.voice is None:
+            self._stop_thinking(thread)
+        else:
+            self._thinking = thread
+
+    def _audio_ready(self):
+        thread, self._thinking = self._thinking, None
+        self._stop_thinking(thread)
 
     def _note_audio_started(self):
         called, self._play_called = self._play_called, None
@@ -566,34 +678,21 @@ class SB01ConversationLoop:
         if GESTURE_CUES:
             text, marks = gesture_cues.split(text)   # the marks are never spoken
             if not text:
+                self._audio_ready()
                 return                               # a reply that was only marks: nothing to say
         self.speaking.set()
-        self.tts_done.clear()
         try:
             self.audio.LedControl(0, 0, 128)
-            pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text, language))
-            # Arms are taken and the first second of motion is ready, or no gesture.
+            try:
+                pcm, gesture_pcm = asyncio.run(self._text_to_pcm(text, language))
+            finally:
+                self._audio_ready()                  # whatever filled the wait for Chatterbox ends here
             cues = gesture_cues.timed(marks, self._spoken_words, text) if marks else []
             if cues and self._words_estimated and not self._told_estimate:
                 self._told_estimate = True
                 print("[voice] Chatterbox reports no word times: teaching gestures are placed by "
                       "estimate, from each sentence's measured length")
-            if cues:
-                gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm, cues=cues)
-            else:
-                gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm)
-
-            stream_id = str(int(time.time() * 1000))
-            total = len(pcm)
-            for offset in range(0, total, PCM_CHUNK_BYTES):
-                chunk = pcm[offset:offset + PCM_CHUNK_BYTES]
-                if offset == 0 and gesturing:
-                    self._begin_gesture()
-                self.audio.PlayStream("sb01", stream_id, list(chunk))
-                if offset + PCM_CHUNK_BYTES < total:
-                    time.sleep(1.0)
-            self.tts_done.wait(timeout=total / (PCM_SAMPLE_RATE * 2) + 3.0)
-            time.sleep(0.4)
+            self._play(pcm, gesture_pcm, cues)
         except BaseException:
             if self.gestures:
                 self.gestures.stop()
@@ -601,6 +700,29 @@ class SB01ConversationLoop:
         finally:
             self.audio.LedControl(0, 0, 0)
             self.speaking.clear()
+
+    def _play(self, pcm: bytes, gesture_pcm: bytes | None, cues: list):
+        """Send this audio to the robot's speaker, with its arm motion, and wait for it to finish."""
+        self.tts_done.clear()
+        # Arms are taken and the first second of motion is ready, or no gesture.
+        if cues:
+            if GESTURE_LEAD:                         # the head start is for the speech motion only
+                cues = [{**cue, "time": cue["time"] + GESTURE_LEAD} for cue in cues]
+            gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm, cues=cues)
+        else:
+            gesturing = bool(gesture_pcm) and self.gestures.start(gesture_pcm)
+
+        stream_id = str(int(time.time() * 1000))
+        total = len(pcm)
+        for offset in range(0, total, PCM_CHUNK_BYTES):
+            chunk = pcm[offset:offset + PCM_CHUNK_BYTES]
+            if offset == 0 and gesturing:
+                self._begin_gesture()
+            self.audio.PlayStream("sb01", stream_id, list(chunk))
+            if offset + PCM_CHUNK_BYTES < total:
+                time.sleep(1.0)
+        self.tts_done.wait(timeout=total / (PCM_SAMPLE_RATE * 2) + 3.0)
+        time.sleep(0.4)
 
     # ── Claude ───────────────────────────────────────────────────────────────
 
@@ -726,7 +848,7 @@ class SB01ConversationLoop:
                 emotion_led = EMOTION_MAP.get(emotion, ((0, 0, 0), ""))[0]
                 self.audio.LedControl(*emotion_led)
 
-                thinking = self._start_thinking()
+                thinking = self._start_thinking(user_text)
                 try:
                     reply, emotion_led = self._ask_claude(user_text, emotion)
                     reply_language = self.language
@@ -736,7 +858,7 @@ class SB01ConversationLoop:
                     emotion_led = (0, 0, 0)
                     reply_language = None     # the fixed apology is English
                 finally:
-                    self._stop_thinking(thinking)
+                    self._reply_ready(thinking)
 
                 print(f"[{ROBOT_NAME}]  {gesture_cues.split(reply)[0] if GESTURE_CUES else reply}")
                 self._speak(reply, language=reply_language)   # Claude's reply is in the conversation language

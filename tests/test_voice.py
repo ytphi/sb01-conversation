@@ -566,7 +566,9 @@ class WhichEngineSpeaksWhichLanguage(unittest.TestCase):
         with open(os.path.join(vc.FRAMEWORK_DIR, "config.yaml"), encoding="utf-8") as settings:
             text = settings.read()
         found = dict(re.findall(r"^    (\w+): \{ engine: (\w+),", text, flags=re.MULTILINE))
-        self.assertEqual(found, {language: entry["engine"] for language, entry in SHIPPED_LANGUAGES.items()})
+        # On this branch English ships on the multilingual engine too; the other
+        # tests keep SHIPPED_LANGUAGES (English on nano) to cover that routing.
+        self.assertEqual(found, {language: "multilingual" for language in SHIPPED_LANGUAGES})
 
     def test_by_default_every_engine_is_on_the_processor(self):
         with _real_framework(dict(SHIPPED)) as spoken:
@@ -756,6 +758,72 @@ class OriginalVolumeIsKept(unittest.TestCase):
         with mock.patch.object(vc.ChatterboxVoice, "_tidied", side_effect=AssertionError("Edge TTS must not use Chatterbox")):
             _speak(loop, "Hello there, nice to meet you.", "en")
         self.assertEqual(b"".join(robot.played), base._Segment.raw_data)
+
+
+class WarmToneWhenAskedFor(unittest.TestCase):
+    """SB01_CHATTERBOX_TONE=warm: warmer and louder, never clipping, same length. Unset: nothing changes."""
+
+    def setUp(self):
+        self._saved = os.environ.pop("SB01_CHATTERBOX_TONE", None)
+
+    def tearDown(self):
+        os.environ.pop("SB01_CHATTERBOX_TONE", None)
+        if self._saved is not None:
+            os.environ["SB01_CHATTERBOX_TONE"] = self._saved
+
+    @staticmethod
+    def _speechlike(seconds=2.0, peak=0.9):
+        clock = np.arange(round(seconds * RATE)) / RATE
+        wave = (np.sin(2 * np.pi * 180 * clock) + 0.5 * np.sin(2 * np.pi * 3000 * clock)) * (0.25 + 0.75 * np.abs(np.sin(2 * np.pi * 2.0 * clock)))
+        return (peak * wave / np.abs(wave).max()).astype(np.float32)
+
+    def _made(self, wave, **kwargs):
+        engine = _Engine()
+        engine.bad = (wave, RATE)
+        return _voice(engine).synthesize(REPLIES["en"], "en", **kwargs)
+
+    @staticmethod
+    def _band(samples, low, high):
+        spectrum = np.abs(np.fft.rfft(samples)) ** 2
+        frequency = np.fft.rfftfreq(len(samples), 1 / RATE)
+        return float(spectrum[(frequency >= low) & (frequency < high)].sum())
+
+    def test_without_the_setting_the_audio_is_untouched(self):
+        wave = self._speechlike()
+        self.assertEqual(self._made(wave).pcm, _to_pcm16(wave, RATE, 16000))
+
+    def test_warm_is_louder_and_never_above_its_ceiling(self):
+        wave = self._speechlike()
+        os.environ["SB01_CHATTERBOX_TONE"] = "warm"
+        speech = self._made(wave)
+        plain = np.frombuffer(_to_pcm16(wave, RATE, 16000), dtype="<i2").astype(np.float64)
+        warm = np.frombuffer(speech.pcm, dtype="<i2").astype(np.float64)
+        self.assertEqual(len(warm), len(plain))                                     # same length: timing is kept
+        self.assertGreater(20 * np.log10(np.sqrt(np.mean(warm ** 2)) / np.sqrt(np.mean(plain ** 2))), 2.0)
+        self.assertLessEqual(np.abs(warm).max() / 32767, vc.WARM_CEILING + 0.005)
+        self.assertEqual(speech.scale, 1.0)                                         # the clip guard had nothing to do
+
+    def test_warm_has_more_low_and_less_high(self):
+        wave = self._speechlike(peak=0.2)                                           # quiet enough that the ceiling is not involved
+        shaped = vc.warm_tone(wave, RATE)
+        low = 10 * np.log10(self._band(shaped, 100, 400) / self._band(wave, 100, 400))
+        high = 10 * np.log10(self._band(shaped, 2500, 3500) / self._band(wave, 2500, 3500))
+        self.assertGreater(low, high + 2.0)                                         # more body, less edge
+        self.assertAlmostEqual(high, vc.WARM_LOUDER_DB + vc.WARM_HIGH_DB * 0.26, delta=0.5)
+
+    def test_both_copies_carry_the_same_tone(self):
+        wave = self._speechlike()
+        os.environ["SB01_CHATTERBOX_TONE"] = "warm"
+        speech = self._made(wave)
+        shaped = vc.warm_tone(wave, RATE)
+        self.assertEqual(speech.pcm, _to_pcm16(shaped, RATE, 16000))
+        self.assertEqual(speech.gesture_pcm, _to_pcm16(shaped, RATE, 24000))
+
+    def test_a_tone_that_does_not_exist_is_refused_in_plain_words(self):
+        os.environ["SB01_CHATTERBOX_TONE"] = "sparkly"
+        with self.assertRaises(vc.VoiceUnavailable) as refused:
+            _voice()
+        self.assertIn("SB01_CHATTERBOX_TONE", str(refused.exception))
 
 
 class ClippingIsPrevented(unittest.TestCase):

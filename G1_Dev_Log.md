@@ -446,6 +446,65 @@ the real Chatterbox models, the real gesture server and a stand-in robot.
 
 ---
 
+### 2026-10-09 — Multilingual voice for every language, and filling the wait (all opt-in)
+
+**Not run on the physical G1.** Everything here was checked with the real Chatterbox models, the real
+gesture server and gesture client, and a stand-in robot (no DDS), on a laptop with a 6 GB RTX 3050.
+
+**What changed**
+
+- **English on the Multilingual engine** (`experimental/speech-framework/config.yaml`). English, Spanish
+  and Chinese now all use Chatterbox Multilingual; the English-only Nano engine is no longer loaded. The
+  published branch `robogesture_full_update_w/voice_VetraNyx` keeps Nano for English and is the faster one.
+  The voice is Chatterbox's own built-in one in all three languages, so nothing besides this repository
+  and the Chatterbox install is needed on a machine that pulls it.
+- **`SB01_CHATTERBOX_TONE=warm`** (`teleop/voice_chatterbox.py`): more body below about 300 Hz, a little
+  less above about 5 kHz, about 5 dB louder with the loudest moments held under 0.94 of full scale. Timing
+  and length are unchanged. This is a deliberate change of level, chosen by ear from samples; without the
+  setting the audio is the model's own, as before.
+- **`SB01_FILLER=1`** (`scripts/sb01_conversation.py`): with the Chatterbox voice, a short friendly line
+  is said as soon as a phrase is heard, while the reply is synthesized ("That's a great question. Let me
+  think about how to answer that." after a question, "Hmm, let me think about that for a moment."
+  otherwise; Spanish and Chinese lines too). The lines are synthesized once at startup. None is said
+  before the answer to a phrase of fewer than four words. A phrase counts as a question if it has a
+  question mark or opens with a question word, since speech recognition often drops the mark.
+- **`SB01_GESTURE_POSES=idle`**: no pose; the arms stay where they hang and drift slightly until the
+  reply is ready. `thinking` (now with joints that start one after another) and `hips` (hands beside the
+  hips, slow lean; arms only) are also available. With the Chatterbox voice a pose is kept until the audio
+  is ready, up to 20 s. The gesture server allows a pose for up to 30 s and sends a long one in pieces:
+  **restart the gesture server** after pulling this.
+- **`SB01_GESTURE_LEAD`** (seconds, 0 to 0.6): plays the speech motion that much ahead of the voice.
+  Left unset; the motion as generated was preferred.
+
+**Measured on the laptop** (voice and gesture server sharing the card, built-in voice)
+
+| | |
+|---|---|
+| Multilingual on the processor | reply starts 20 to 55 s after the question |
+| Multilingual on the card | typically 6.5 s; about 5 s for a 2 s reply, 9 to 11 s for a 6 to 9 s reply |
+| With the friendly line, idle movement and warm tone | first sound 0.7 s after the phrase is heard; line about 3 s; then typically 5.5 s quiet (longest 6.8 s); reply starts typically 9 s after the phrase is heard |
+
+- Multilingual needs 5.5 GB of free graphics memory by default. Beside the gesture server on a 6 GB card
+  only 4.6 GB is free, so `SB01_CHATTERBOX_GPU_GB=4.5` was used; the card then sat at 4.8 to 4.9 of 6 GB.
+  That is less spare room than the default asks for. A card of 8 GB or more needs no such setting.
+- Preparing the eight lines adds to startup: about 50 s in all on the laptop.
+- Speaking sentence by sentence was measured (first words after 3 to 4 s, pauses of 0.5 to 5 s between
+  sentences) and **not built**: the pauses were judged worse than the single wait.
+
+**Limits of what was checked**
+
+- One run stalled: the first reply took 31 s on the card and the arms were not back at rest when it began.
+  It was not reproduced in later runs and its cause was not established.
+- The `hips` pose sits at the collision filter's margin (the filter adjusted nearly every frame). Poses
+  were measured on the model with finger hands, not sb01's rigid hands.
+- Whether the voice sounds natural, and whether the warm tone distorts on the G1's speaker, was not
+  judged here. The Spanish and Chinese lines need a native speaker's check.
+- The reply to a question was never made by the real Claude in these runs (no API key on the laptop).
+
+**Tests:** `python3 -m unittest discover` (183). Five new tests cover the warm tone.
+
+---
+
 ## Pending / Next Steps
 
 - [ ] Implement Claude streaming response + per-sentence TTS (reduce latency)

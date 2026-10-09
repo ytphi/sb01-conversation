@@ -42,6 +42,7 @@ Settings:
   SB01_CHATTERBOX_GPU_GB        free graphics memory required before cuda is used
                                 (default 7 for both engines, 4 for nano, 5.5 for multilingual;
                                 it cannot be set below what the engines were measured to use)
+  SB01_CHATTERBOX_TONE          unset (default): the voice as the model makes it | warm
 
 Volume. Chatterbox audio normally keeps exactly the amplitude the model
 generated, in every language: nothing here turns it up, matches it to Edge TTS,
@@ -58,6 +59,12 @@ is multiplied by the largest number below 1 that brings its highest peak just
 under full scale (see _clip_guard). The robot audio and the gesture copy get
 the same number, Speech.scale records it, and the conversation program prints
 it. A reply within range is never touched: its scale is exactly 1.0.
+
+Tone, only when asked for. SB01_CHATTERBOX_TONE=warm changes how every reply
+sounds, on purpose: more body in the low part of the voice, slightly less edge
+at the top, and about 5 dB louder, with the loudest moments held under a
+ceiling so the lift cannot clip (see warm_tone). Timing and length are not
+changed. Without the setting none of this runs and the paragraphs above hold.
 """
 
 import contextlib
@@ -104,6 +111,14 @@ QUIET = 0.02                # of the loudest sample: below this is silence
 # peak is put. 0.998 is 0.02 dB under full scale, enough that rounding to 16
 # bits cannot bring a sample back up to it.
 SAFE_PEAK = 0.998
+# SB01_CHATTERBOX_TONE=warm (chosen by ear from samples on 2026-10-09):
+TONES = ("warm",)
+WARM_LOW_DB = 3.5           # more body: this much more below about 300 Hz
+WARM_HIGH_DB = -2.0         # less edge: this much less above about 5 kHz
+WARM_LOUDER_DB = 5.0        # everything this much louder ...
+WARM_CEILING = 0.94         # ... except that no peak goes above this (of full scale)
+WARM_BLOCK_SECONDS = 0.005  # how finely the loudest moments are followed
+WARM_RELEASE_SECONDS = 0.06
 
 _SENTENCE_END = re.compile(r"[.!?]+[\"')\]]*\s+|[。！？]+")
 _CJK = re.compile(r"[㐀-鿿]")
@@ -112,6 +127,46 @@ _WORD = re.compile(r"[㐀-鿿]|[^\W_]+(?:['’][^\W_]+)*")
 
 class VoiceUnavailable(Exception):
     """Chatterbox cannot be used right now; the message says why in plain words."""
+
+
+def chosen_tone() -> str:
+    """Empty for the voice as the model makes it, or the tone SB01_CHATTERBOX_TONE names."""
+    tone = os.environ.get("SB01_CHATTERBOX_TONE", "").strip().lower()
+    if tone and tone not in TONES:
+        raise VoiceUnavailable(f"SB01_CHATTERBOX_TONE is {tone!r}; use {' or '.join(TONES)}, or leave it unset")
+    return tone
+
+
+def warm_tone(wave: np.ndarray, rate: int) -> np.ndarray:
+    """The same speech, warmer and louder. Same length and timing.
+
+    Tone: a smooth lift below about 300 Hz and a smooth cut above about 5 kHz,
+    applied to the whole reply at once, so nothing is shifted in time.
+    Level: everything up by WARM_LOUDER_DB; where that would pass WARM_CEILING
+    the level is eased down just before the peak and let back up after it."""
+    wave = np.asarray(wave, dtype=np.float32)
+    spectrum = np.fft.rfft(wave)
+    frequency = np.fft.rfftfreq(len(wave), 1.0 / rate)
+    low = 1.0 / (1.0 + (frequency / 300.0) ** 2)
+    high = 1.0 - 1.0 / (1.0 + (frequency / 5000.0) ** 2)
+    change_db = WARM_LOW_DB * low + WARM_HIGH_DB * high
+    change_db[frequency < 60.0] = 0.0                # no lift of rumble below the voice
+    shaped = np.fft.irfft(spectrum * 10.0 ** (change_db / 20.0), n=len(wave)) * 10.0 ** (WARM_LOUDER_DB / 20.0)
+    # The loudest sample of each short block, and of the blocks beside it, says
+    # how far that stretch must come down; in between the level moves smoothly.
+    block = max(1, round(WARM_BLOCK_SECONDS * rate))
+    count = -(-len(shaped) // block)
+    padded = np.zeros(count * block)
+    padded[:len(shaped)] = np.abs(shaped)
+    peaks = padded.reshape(count, block).max(axis=1)
+    beside = np.pad(peaks, 1, mode="edge")
+    peaks = np.maximum(np.maximum(beside[:-2], beside[1:-1]), beside[2:])
+    level = np.minimum(1.0, WARM_CEILING / np.maximum(peaks, 1e-9))
+    span = max(1, round(WARM_RELEASE_SECONDS / WARM_BLOCK_SECONDS))
+    eased = np.convolve(np.pad(level, span, mode="edge"), np.ones(2 * span + 1) / (2 * span + 1), mode="valid")
+    level = np.minimum(level, eased)
+    centres = (np.arange(count) + 0.5) * block
+    return (shaped * np.interp(np.arange(len(shaped)), centres, level)).astype(np.float32)
 
 
 @dataclass
@@ -239,6 +294,7 @@ class ChatterboxVoice:
         self.preload = preload
         self.loaded = False
         self.device, self.device_note = "cpu", ""
+        self.tone = chosen_tone()
         self._synth, self._to_pcm16 = synth, to_pcm16
         if synth is None:
             self._synth, self._to_pcm16, self.preload = self._framework()
@@ -369,7 +425,10 @@ class ChatterboxVoice:
             seconds = len(whole) / rate
             if not MIN_SECONDS <= seconds <= MAX_SECONDS:
                 raise VoiceUnavailable(f"the audio came out {seconds:.1f} s long, which cannot be right")
-            # The amplitude is the model's own: no gain, no matching to Edge TTS.
+            # The amplitude is the model's own: no gain, no matching to Edge TTS,
+            # unless a tone was asked for (SB01_CHATTERBOX_TONE).
+            if self.tone == "warm":
+                whole = warm_tone(whole, rate)
             pcm = self._to_pcm16(whole, rate, PLAYBACK_RATE)
             gesture_pcm = self._to_pcm16(whole, rate, GESTURE_RATE) if gesture_audio else None
             # Unless a sample would exceed full scale: then this reply alone is

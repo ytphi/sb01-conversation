@@ -83,20 +83,48 @@ POSES = {
     # mesh model, every gap (head, torso, other arm) is 7 cm or more.
     "thinking": {"left":  (-0.40, 0.80, -1.08, -0.22, 0.0, -0.10, 0.0),
                  "right": (-0.41, -0.30, 0.42, -0.53, 0.0, -0.19, 0.0)},
+    # Hands on hips: elbows out to the sides and a little back, each hand beside
+    # its hip. The filter keeps its margin, so the hands hover a few centimetres
+    # off the body rather than resting on it.
+    "hips": {"left":  (0.61, 1.12, -0.66, 0.0, 0.0, -0.15, -0.03),
+             "right": (0.61, -1.12, 0.66, 0.0, 0.0, -0.15, 0.03)},
+    # No pose at all: the arms stay where they hang and only drift a little
+    # (see POSE_SWAY), so the robot does not look switched off while it waits.
+    "idle": {},
 }
 # Small movement while staying in a pose, so it does not look frozen:
-# (arm, joint 0-6, size in rad, where in the cycle it starts as a fraction).
+# (arm, joint 0-6, size in rad, where in the cycle it starts as a fraction, and
+# optionally its speed as a fraction of POSE_SWAY_HZ).
 # The G1 has no joints that lift or roll the shoulders themselves and the waist
 # is left alone for balance, so "shifting the shoulders" is the two shoulder
-# pitch joints rocking in opposite directions, with a little roll and yaw.
+# pitch joints rocking in opposite directions, with a little roll and yaw. The
+# elbows and the raised wrist drift at a slower pace of their own, so the sway
+# does not repeat like a metronome.
 POSE_SWAY = {
     "thinking": (("left", 0, 0.06, 0.0), ("right", 0, 0.06, 0.5),
-                 ("left", 1, 0.03, 0.25), ("right", 2, 0.04, 0.25)),
+                 ("left", 1, 0.03, 0.25), ("right", 2, 0.04, 0.25),
+                 ("right", 3, 0.03, 0.1, 0.6), ("left", 3, 0.02, 0.6, 0.6), ("right", 5, 0.04, 0.35, 0.6)),
+    # A slow lean from one side to the other, as if shifting weight: both elbows
+    # move the same way, one shoulder comes forward as the other goes back. The
+    # legs and waist are not commanded, so this is the arms only.
+    "hips": (("left", 1, 0.08, 0.0, 0.5), ("right", 1, 0.08, 0.0, 0.5),
+             ("left", 0, 0.06, 0.25, 0.5), ("right", 0, 0.06, 0.75, 0.5),
+             ("left", 3, 0.04, 0.5, 0.5), ("right", 3, 0.04, 0.0, 0.5)),
+    # Barely there, like breathing: both arms ease forward and back together,
+    # the elbows give slightly, each side at a slightly different pace.
+    "idle": (("left", 0, 0.035, 0.0, 0.6), ("right", 0, 0.035, 0.08, 0.6),
+             ("left", 3, 0.045, 0.3, 0.6), ("right", 3, 0.045, 0.4, 0.55),
+             ("left", 1, 0.015, 0.5, 0.45), ("right", 1, 0.015, 0.0, 0.45)),
 }
 POSE_SWAY_HZ = 0.4            # one full shift every 2.5 s
-POSE_SWAY_EASE_SECONDS = 0.6  # the sway grows from nothing and fades out again
+POSE_SWAY_EASE_SECONDS = 1.0  # the sway grows from nothing and fades out again
+# The way to a pose. The joints do not all start and stop together: the shoulder
+# leads, the elbow and wrist follow, and one arm can trail the other.
+POSE_JOINT_LAG = 0.30         # the last wrist joint starts this far into the move, as a fraction of it
+POSE_ARM_LAG = {"thinking": {"left": 0.12}}   # this arm starts that much later than the other
+POSE_SHORTEST_PART = 0.55     # no joint makes its whole move in less than this fraction of the time
 POSE_ARMS = {"left": ARMS[:7], "right": ARMS[7:]}
-POSE_MAX_SECONDS = 10.0
+POSE_MAX_SECONDS = 30.0
 POSE_STEP = 0.045         # rad per frame at the fastest point of the move (the limit is 0.05)
 POSE_SETTLE_FRAMES = 10   # at the pose, through the filter, before it is simply held
 POSE_BLOCK_FRAMES = 150   # frames per message
@@ -143,6 +171,28 @@ def _ease(ratio):
     """0 to 1 with no sudden start or stop in speed or acceleration."""
     r = np.clip(ratio, 0.0, 1.0)
     return r * r * r * (r * (r * 6.0 - 15.0) + 10.0)
+
+
+def _pose_path(start, target, name):
+    """Frames from `start` to `target` for a fixed pose. Each joint is eased, and
+    starts a little after the one before it along the arm. The joint with the
+    furthest to go takes the whole time, and no joint is asked to move faster
+    than it would if they all moved together, so the lag costs no speed."""
+    travel = np.abs(target - start)
+    furthest = float(travel.max())
+    # _ease moves 1.875 times its average speed at its fastest point.
+    count = max(MOTION_RATE // 2, int(np.ceil(1.875 * furthest / POSE_STEP)) + 1)
+    clock = np.arange(1, count + 1, dtype=np.float32) / count
+    path = np.repeat(np.asarray(start, dtype=np.float32)[None], count, axis=0)
+    for side, joints in POSE_ARMS.items():
+        arm_lag = POSE_ARM_LAG.get(name, {}).get(side, 0.0)
+        for order, index in enumerate(joints):
+            if travel[index] == 0.0:
+                continue
+            part = max(travel[index] / furthest, POSE_SHORTEST_PART)
+            wait = min(arm_lag + POSE_JOINT_LAG * order / 6.0, 1.0 - part)
+            path[:, index] = start[index] + (target[index] - start[index]) * _ease((clock - wait) / part)
+    return path
 
 
 def plan_cues(cues, hold):
@@ -428,31 +478,36 @@ class GesturePlanner:
         target = start.copy()
         for side, angles in POSES[name].items():
             target[list(POSE_ARMS[side])] = angles
-        # A smoothstep moves 1.5 times its average speed at its fastest point.
-        count = max(MOTION_RATE // 2, int(np.ceil(1.5 * np.abs(target - start).max() / POSE_STEP)) + 1)
-        yield {"hold": hold[list(ARMS)].tolist(), "fps": MOTION_RATE, "path": count + POSE_SETTLE_FRAMES}
+        way = _pose_path(start, target, name)
+        yield {"hold": hold[list(ARMS)].tolist(), "fps": MOTION_RATE, "path": len(way) + POSE_SETTLE_FRAMES}
 
         # There: through the filter, which may stop short of the pose to keep clear.
-        there = np.concatenate((_interpolate(start, target, count),
-                                np.repeat(target[None], POSE_SETTLE_FRAMES, axis=0)))
+        there = np.concatenate((way, np.repeat(target[None], POSE_SETTLE_FRAMES, axis=0)))
         checked = self.collision.check(there)
         first_ms = round((time.perf_counter() - started) * 1000)
         # Stay: the last checked frame, repeated, plus the pose's sway if it has one.
         stay = np.repeat(checked[-1:], round(seconds * MOTION_RATE), axis=0)
-        if len(stay) and name in POSE_SWAY:
+        swaying = bool(len(stay)) and name in POSE_SWAY
+        if swaying:
             clock = np.arange(len(stay), dtype=np.float32) / MOTION_RATE
             ease = np.clip(np.minimum(clock, clock[-1] - clock) / POSE_SWAY_EASE_SECONDS, 0.0, 1.0)
             ease = ease * ease * (3.0 - 2.0 * ease)
-            for side, joint, size, phase in POSE_SWAY[name]:
+            for side, joint, size, phase, *pace in POSE_SWAY[name]:
                 stay[:, POSE_ARMS[side][joint]] += ease * size * np.sin(
-                    2.0 * np.pi * (POSE_SWAY_HZ * clock + phase))
-            stay = self.collision.check(stay)
+                    2.0 * np.pi * (POSE_SWAY_HZ * (pace[0] if pace else 1.0) * clock + phase))
         columns = list(ARMS) + [WEIGHT_INDEX]
         total = 0
-        for part in (checked, stay):
-            for offset in range(0, len(part), POSE_BLOCK_FRAMES):
-                total += len(part[offset:offset + POSE_BLOCK_FRAMES])
-                yield {"frames": part[offset:offset + POSE_BLOCK_FRAMES, columns].tolist()}
+        for offset in range(0, len(checked), POSE_BLOCK_FRAMES):
+            total += len(checked[offset:offset + POSE_BLOCK_FRAMES])
+            yield {"frames": checked[offset:offset + POSE_BLOCK_FRAMES, columns].tolist()}
+        # The sway goes through the filter a block at a time, so a long stay is
+        # sent as it is checked and the client is not kept waiting for all of it.
+        for offset in range(0, len(stay), POSE_BLOCK_FRAMES):
+            block = stay[offset:offset + POSE_BLOCK_FRAMES]
+            if swaying:
+                block = self.collision.check(block)
+            total += len(block)
+            yield {"frames": block[:, columns].tolist()}
         yield {
             "done": True,
             "frames_total": total,
