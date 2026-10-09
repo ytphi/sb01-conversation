@@ -63,14 +63,15 @@ ARM_JOINTS   = tuple(range(15, 29))   # left 15-21, right 22-28 (arm7 layout)
 WEIGHT_JOINT = 29                     # kNotUsedJoint: arm_sdk blend weight, 0 = robot's own pose
 ARM_KP = 45.0
 ARM_KD = 1.2
-# rt/arm_sdk also takes the waist. Unitree's own arm_sdk example sends it with
-# gains at a fixed position, so by default it is held where it was when the arms
-# were taken. RoboGesture itself sends the arms only and leaves the waist to the
-# robot's balance controller: SB01_GESTURE_WAIST=free does the same. Use it if
-# the robot leans or loses balance while gesturing: a waist that is not
-# mechanically locked is part of how the robot balances, and holding it still
-# takes that away for as long as the arms are held.
-WAIST_MODE = os.environ.get("SB01_GESTURE_WAIST", "hold").strip().lower() or "hold"
+# rt/arm_sdk also takes the waist. By default nothing is sent to it: only the
+# arms are commanded, as in RoboGesture's own robot code, and the waist stays
+# with the robot's balance controller. This robot's waist is not mechanically
+# locked, so it is part of how the robot balances, and it was seen to lean off
+# balance while gesturing when the waist was held.
+# SB01_GESTURE_WAIST=hold brings the earlier behaviour back: the waist is held,
+# with the gains of Unitree's own arm_sdk example, where it was when the arms
+# were taken.
+WAIST_MODE = os.environ.get("SB01_GESTURE_WAIST", "free").strip().lower() or "free"
 if WAIST_MODE not in ("hold", "free"):
     raise ValueError(f"SB01_GESTURE_WAIST is {WAIST_MODE!r}; use hold or free")
 WAIST_HOLD = WAIST_MODE == "hold"
@@ -231,8 +232,9 @@ class GestureClient:
         self._sub = ChannelSubscriber("rt/lowstate", LowState_)
         self._sub.Init(self._lowstate_callback, 10)
 
-        print("[gesture] waist: " + ("held in place while the arms are held (SB01_GESTURE_WAIST=free leaves it to the robot)"
-                                     if WAIST_HOLD else "left to the robot's own balance controller; only the arms are commanded"))
+        print("[gesture] waist: " + ("held in place while the arms are held (SB01_GESTURE_WAIST=hold)" if WAIST_HOLD else
+                                     "left to the robot's own balance controller; only the arms are commanded "
+                                     "(SB01_GESTURE_WAIST=hold holds it instead)"))
         atexit.register(self.close)
         self._install_signal_handlers()
 
