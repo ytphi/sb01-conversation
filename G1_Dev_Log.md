@@ -463,6 +463,12 @@ English on Multilingual, as it was measured.
 `SB01_CHATTERBOX_TONE=plain` gives the voice as the model makes it. The waiting line and the idle
 movement stay off unless their settings are added.
 
+**And back to one voice for every language:** English on this branch uses the Multilingual engine's built-in
+voice again (`en` is `multilingual` in `config.yaml`), so the voice no longer changes when the language
+does. The Nano engine is then not loaded at all, so `SB01_CHATTERBOX_GPU_ENGINES=nano` puts nothing on
+the graphics card: use `SB01_CHATTERBOX_GPU_ENGINES=multilingual` (5.5 GB free needed), or the voice runs
+on the processor and is very slow. The fast branch keeps English on Nano.
+
 **What changed**
 
 - **English on the Multilingual engine** (`experimental/speech-framework/config.yaml`). English, Spanish
