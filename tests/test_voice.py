@@ -566,9 +566,7 @@ class WhichEngineSpeaksWhichLanguage(unittest.TestCase):
         with open(os.path.join(vc.FRAMEWORK_DIR, "config.yaml"), encoding="utf-8") as settings:
             text = settings.read()
         found = dict(re.findall(r"^    (\w+): \{ engine: (\w+),", text, flags=re.MULTILINE))
-        # On this branch English ships on the multilingual engine too; the other
-        # tests keep SHIPPED_LANGUAGES (English on nano) to cover that routing.
-        self.assertEqual(found, {language: "multilingual" for language in SHIPPED_LANGUAGES})
+        self.assertEqual(found, {language: entry["engine"] for language, entry in SHIPPED_LANGUAGES.items()})
 
     def test_by_default_every_engine_is_on_the_processor(self):
         with _real_framework(dict(SHIPPED)) as spoken:
@@ -1424,7 +1422,7 @@ class TheWholeProgram(unittest.TestCase):
         self.assertEqual(len(engine.said), 3)                             # greeting, reply, goodbye
         self.assertEqual(base.tts_calls, [])                              # Edge TTS never needed
         self.assertEqual(robot.events, ["gesture-start", "gesture-begin", "audio"] * 3)
-        self.assertIn("Yohdee", engine.said[0][0])                         # the greeting uses the name, spelled for the voice
+        self.assertIn("Yohdee", engine.said[0][0])                        # the greeting uses the name, spelled for the voice
 
     def test_it_starts_and_runs_when_chatterbox_cannot_load(self):
         engine = _Engine()

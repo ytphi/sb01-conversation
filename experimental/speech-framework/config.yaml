@@ -63,7 +63,7 @@ tts:
   # otherwise a path to a reference clip (see utilities/voice-refs/README.md).
   # Any extra keys are passed straight to the model's generate().
   languages:
-    en: { engine: multilingual, voice: null }
+    en: { engine: nano,         voice: null }
     zh: { engine: multilingual, voice: null, exaggeration: 0.5, cfg_weight: 0.5 }
     ja: { engine: multilingual, voice: null, exaggeration: 0.5, cfg_weight: 0.5 }
     es: { engine: multilingual, voice: null, exaggeration: 0.5, cfg_weight: 0.5 }
