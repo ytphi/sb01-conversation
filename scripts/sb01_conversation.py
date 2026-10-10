@@ -5,7 +5,9 @@ sb01_conversation.py  -  LLM-powered conversation loop for the G1 robot "Yotie"
 Features:
   - Face recognition at startup → loads per-person memory profile
   - Persistent memory: user profile + session summaries saved across runs
-  - Emotion-aware: LED reacts to detected voice emotion; Claude gets emotion hint
+  - Speech recognition: Whisper on the laptop GPU from the robot's mic (default), or the
+    G1's built-in ASR (--asr robot)
+  - Emotion-aware (built-in ASR only): LED reacts to detected voice emotion; Claude gets a hint
   - Edge TTS with automatic language detection (EN / ZH / ES)
   - Optional arm gestures while talking (G1 built-in arm actions, picked by Claude)
   - --demo mode: visitor-facing persona instead of the classroom assistant
@@ -16,6 +18,7 @@ Network layout:
 
 Usage:
   python3 scripts/sb01_conversation.py [network_interface] [--demo] [--gestures | --no-gestures]
+                                       [--asr whisper|robot]
 """
 
 import sys
@@ -55,9 +58,11 @@ from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from teleop.face_id import FaceIdentifier
-from teleop.memory_manager import MemoryManager
-from teleop.knowledge_base import KnowledgeBase
+from sb01.face_id import FaceIdentifier
+from sb01.memory_manager import MemoryManager
+from sb01.knowledge_base import KnowledgeBase, _preprocess
+from sb01.talk_gestures import TalkGestures
+from sb01.whisper_asr import WhisperASR
 
 # ── config ───────────────────────────────────────────────────────────────────
 NETWORK_INTERFACE = "eno0"
@@ -80,7 +85,10 @@ SUMMARY_MODEL = "claude-opus-4-8"
 MIN_SENTENCE_CHARS = 25
 
 COURSE_START = datetime.date(2026, 8, 24)   # Monday of IST 5930 Week 1 (Fall 2026)
-COURSE_WEEKS = 15   # shorter pieces ("U.S.", "Hi!") are merged into the next sentence
+COURSE_WEEKS = 15
+# Labs actually posted on Canvas. The schedule and syllabus list later labs as plans only.
+# Update this when a new lab is posted (and save its Canvas page in memory/course_files/Canvas/).
+POSTED_LABS = [1, 2, 3]   # shorter pieces ("U.S.", "Hi!") are merged into the next sentence
 
 # People whose conversations are never saved and never prompted for consent
 # (e.g. the instructor/owner running the robot, as opposed to students).
@@ -139,6 +147,9 @@ BASE_SYSTEM_PROMPT = (
     "date and course week — use it for questions like 'what's due this week'. Never guess a "
     "due date, time, or room: if the reference doesn't say, tell the student to check Canvas or "
     "ask Yutong. "
+    f"Only Labs {', '.join(map(str, POSTED_LABS[:-1]))} and {POSTED_LABS[-1]} have been posted so far. "
+    "Any later lab mentioned in the schedule, syllabus or slides is only a plan: if asked about "
+    "it, say it hasn't been released yet and give no due date or details. "
     "\n\n"
     "You are primarily here to help students in Yutong's embodied AI and robotics seminar — "
     "topics like embodied AI, robotics, the G1 robot itself, the course's lectures and readings, "
@@ -205,6 +216,16 @@ GESTURE_PROMPT = (
     "shake hands or says nice to meet you (shake hand), celebrating (clap or high five), or "
     "warmth and thanks (heart). Most replies should have no gesture."
 )
+
+# appended to either prompt: so Chinese replies use Yutong's real Chinese name
+NAME_PROMPT = (
+    "\n\nYutong's Chinese name is 育僮 (pronounced yù tóng). When you speak Chinese, "
+    "always write it as 育僮, never another transliteration of Yutong."
+)
+
+# Spoken-only respellings: edge-tts often reads 僮 as zhuàng, and it ignores SSML phonemes,
+# so swap in a character with the right sound (the text Claude sees is unchanged).
+TTS_RESPELL = {"育僮": "育同"}
 
 # ── web utilities ─────────────────────────────────────────────────────────────
 
@@ -281,6 +302,22 @@ def load_context() -> str:
 def course_week(day: datetime.date) -> int:
     """1-based IST 5930 week for a date (≤0 before the semester, >COURSE_WEEKS after)."""
     return (day - COURSE_START).days // 7 + 1
+
+
+# TF-IDF only matches exact words, so add the words course pages actually use for
+# common question phrasings ("how long" → "length", "assigned" → "assignment").
+QUERY_EXPANSIONS = {
+    "how long": "length minutes",
+    "assigned": "assignment",
+    "deadline": "due",
+    "turn in": "submit due",
+    "what time": "schedule",
+}
+
+
+def expand_query(text: str) -> str:
+    lower = text.lower()
+    return text + "".join(f" {extra}" for phrase, extra in QUERY_EXPANSIONS.items() if phrase in lower)
 
 
 def resolve_relative_weeks(text: str, week: int) -> str:
@@ -373,6 +410,10 @@ class GestureController:
             except Exception as exc:
                 print(f"[gesture] {name!r} error: {exc}")
 
+    def busy(self) -> bool:
+        """True while a built-in arm action is playing (talking gestures stay out of the way)."""
+        return self._lock.locked()
+
     def stop(self):
         """Arm stop: turn gestures off for the rest of the session and release the arms
         right away, without waiting for a running gesture to finish."""
@@ -389,12 +430,16 @@ class GestureController:
 # ── main class ────────────────────────────────────────────────────────────────
 
 class SB01ConversationLoop:
-    def __init__(self, interface: str, web_context: str, demo: bool = False, gestures: bool = False):
+    def __init__(self, interface: str, web_context: str, demo: bool = False, gestures: bool = False,
+                 talk_gestures: bool = False, asr: str = "whisper", asr_lang: str | None = None):
         self.interface   = interface
+        self.asr_mode    = asr
+        self.asr_lang    = asr_lang
         self.web_context = web_context
         self.demo        = demo
         self.audio       = AudioClient()
         self.gestures    = GestureController(gestures)
+        self.talk        = TalkGestures(talk_gestures, busy=self.gestures.busy)
         self.asr_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         self.speaking    = threading.Event()
         self.tts_done    = threading.Event()
@@ -426,7 +471,7 @@ class SB01ConversationLoop:
         return name
 
     def _build_system_prompt(self) -> str:
-        prompt = DEMO_SYSTEM_PROMPT if self.demo else BASE_SYSTEM_PROMPT
+        prompt = (DEMO_SYSTEM_PROMPT if self.demo else BASE_SYSTEM_PROMPT) + NAME_PROMPT
         if self.gestures.enabled:
             prompt += GESTURE_PROMPT
         if self.person_name:
@@ -441,13 +486,23 @@ class SB01ConversationLoop:
         self.audio.Init()
         self.audio.SetVolume(100)
         self.gestures.init()
+        self.talk.init()
 
         self.person_name = self._identify_person()
         self.face_id.start_live_window()
 
+        # rt/audio_msg is needed either way: its play_state tells us when playback finished
         self.asr_sub = ChannelSubscriber(ASR_TOPIC, String_)
         self.asr_sub.Init(self._asr_callback, 10)
         print(f"[{ROBOT_NAME}] subscribed to {ASR_TOPIC}")
+        if self.asr_mode == "whisper":
+            try:
+                WhisperASR(on_text=lambda text: self.asr_queue.put((text, "")),
+                           interface=self.interface, muted=self.speaking.is_set,
+                           language=self.asr_lang).start()
+            except Exception as exc:
+                print(f"[{ROBOT_NAME}] whisper failed to start ({exc}); using the robot's built-in ASR")
+                self.asr_mode = "robot"
 
         if self.person_name and not self._memory_excluded():
             self.memory_consent = self.memory.get_consent(self.person_name)
@@ -494,7 +549,7 @@ class SB01ConversationLoop:
                 self.tts_done.set()
             return
 
-        if self.speaking.is_set():
+        if self.asr_mode != "robot" or self.speaking.is_set():
             return
 
         text = data.get("text", "").strip()
@@ -544,21 +599,23 @@ class SB01ConversationLoop:
         audio = audio.set_frame_rate(PCM_SAMPLE_RATE).set_channels(1).set_sample_width(2)
         return audio.raw_data
 
-    def _speak(self, text: str):
-        self._speak_sentences([text])
+    def _speak(self, text: str, cue: str | None = None):
+        self._speak_sentences([text], cue)
 
-    def _speak_sentences(self, sentences):
+    def _speak_sentences(self, sentences, cue: str | None = None):
         """Speak an iterable of sentences (e.g. a streaming Claude reply), synthesizing the
         next sentence while the current one plays. ASR is ignored for the whole reply."""
         self.speaking.set()
-        pcm_queue: queue.Queue[bytes | None] = queue.Queue()
+        pcm_queue: queue.Queue[tuple[str, bytes] | None] = queue.Queue()
 
         def synthesize():
             try:
                 for text in sentences:
                     text = re.sub(r'\bCSUSB\b', 'Cal State San Bernardino', text, flags=re.IGNORECASE)
+                    for written, spoken in TTS_RESPELL.items():
+                        text = text.replace(written, spoken)
                     if text.strip():
-                        pcm_queue.put(asyncio.run(self._text_to_pcm(text)))
+                        pcm_queue.put((text, asyncio.run(self._text_to_pcm(text))))
             except Exception as exc:
                 print(f"[{ROBOT_NAME}] TTS failed ({exc}); skipping speech")
             finally:
@@ -567,14 +624,19 @@ class SB01ConversationLoop:
         threading.Thread(target=synthesize, daemon=True).start()
         try:
             first = True
-            while (pcm := pcm_queue.get()) is not None:
+            while (item := pcm_queue.get()) is not None:
+                text, pcm = item
                 if first:
                     self.audio.LedControl(0, 0, 128)
+                    self.talk.begin()          # hands come up as the first sentence starts
                     first = False
+                self.talk.sentence(text, cue)  # movement matched to the sentence's words
+                cue = None                     # a cue (e.g. fist bump) applies to the first sentence only
                 self._play_pcm(pcm)
         except Exception as exc:
             print(f"[{ROBOT_NAME}] playback failed ({exc})")
         finally:
+            self.talk.end()                    # arms ease back to rest
             self.audio.LedControl(0, 0, 0)
             self.speaking.clear()
 
@@ -619,19 +681,37 @@ class SB01ConversationLoop:
         week_note = f", IST 5930 week {week}" if 1 <= week <= COURSE_WEEKS else ""
         context_parts.append(f"[Today is {today:%A, %B} {today.day}, {today.year}{week_note}.]")
 
+        # labs not posted yet: don't search (the schedule/slides describe planned labs), say so
+        posted = ", ".join(map(str, POSTED_LABS))
+        unposted = sorted({int(n) for n in re.findall(r"\blab(\d+)\b", _preprocess(user_text))} - set(POSTED_LABS))
+        if unposted:
+            names = " and ".join(f"Lab {n}" for n in unposted)
+            labs_note = (f"[{names} has not been posted yet (posted so far: Labs {posted}). "
+                         "Say it hasn't been released; give no details or due date.]")
+        else:
+            labs_note = (f"[Only Labs {posted} are posted. Any later lab is NOT released yet, even if the "
+                         "material above says 'released' or gives a date (that is the original plan) — "
+                         "don't say it was released and don't give its dates.]")
+
         # course knowledge base (lecture slides, course notes, readings, instructor CV) — checked
         # first; web search is only a fallback when this comes up empty (see system prompt).
         # Course notes name students, so demo mode (outside visitors) searches PDFs only.
-        kb_hits = self.kb.retrieve(resolve_relative_weeks(user_text, week), include_notes=not self.demo)
+        try:
+            kb_hits = "" if unposted else self.kb.retrieve(expand_query(resolve_relative_weeks(user_text, week)),
+                                                           include_notes=not self.demo)
+        except Exception as exc:   # a search bug must never silence Yotie
+            print(f"[knowledge_base] search failed ({exc}); answering without course material")
+            kb_hits = ""
         if kb_hits:
             context_parts.append(f"[Course material reference:\n{kb_hits}]")
-        elif not self.demo:
+        elif not self.demo and not unposted:
             context_parts.append(
                 "[No local course material matched this question. If it's an in-scope "
                 "class question you can't answer from what you already know, you may web search.]"
             )
 
-        augmented = " ".join(context_parts) + " " + user_text if context_parts else user_text
+        context_parts.append(labs_note)   # last, so it overrides the course material above
+        augmented = " ".join(context_parts) + " " + user_text
         self.history.append({"role": "user", "content": augmented})
 
         if len(self.history) > MAX_HISTORY_TURNS * 2:
@@ -740,6 +820,7 @@ class SB01ConversationLoop:
         """Operator console: 'x' (or 'stop') + Enter = arm stop, conversation continues."""
         for line in sys.stdin:
             if line.strip().lower() in ("x", "stop"):
+                self.talk.stop()
                 self.gestures.stop()
                 return
 
@@ -770,15 +851,20 @@ class SB01ConversationLoop:
                 f"Hey! {ROBOT_NAME} here. What can I do for you?",
             ])
 
-        self.gestures.play("high wave")
-        self._speak(greeting)
+        # Someone Yotie knows gets a fist bump (custom arm motion), or a built-in high five if
+        # talking gestures are off; new faces get a wave.
+        if self.person_name and self.talk.enabled:
+            self._speak(greeting, cue="fistbump")
+        else:
+            self.gestures.play("high five" if self.person_name else "high wave")
+            self._speak(greeting)
         self.audio.LedControl(0, 128, 0)
 
         if self.person_name and not self._memory_excluded() and self.memory_consent is None:
             self.memory_consent = self._ask_memory_consent()
             self.memory.set_consent(self.person_name, self.memory_consent)
 
-        if self.gestures.enabled:
+        if self.gestures.enabled or self.talk.enabled:
             threading.Thread(target=self._watch_keyboard, daemon=True).start()
             print(f"[{ROBOT_NAME}] type x + Enter to stop the arms (conversation keeps going)")
         print(f"[{ROBOT_NAME}] listening  (Ctrl-C to quit)")
@@ -806,7 +892,8 @@ class SB01ConversationLoop:
             except KeyboardInterrupt:
                 print(f"\n[{ROBOT_NAME}] shutting down...")
                 self.face_id.stop_live_window()
-                self.gestures.stop()   # arms down first, no wave on exit
+                self.talk.stop()       # arms down first, no wave on exit
+                self.gestures.stop()
                 self._speak("Goodbye! It was great talking with you.")
                 self._save_session()
                 break
@@ -821,12 +908,20 @@ def main():
     parser.add_argument("--demo", action="store_true",
                         help="visitor-facing persona instead of the classroom assistant (enables gestures)")
     parser.add_argument("--gestures", action=argparse.BooleanOptionalAction, default=None,
-                        help="arm gestures while talking (default: on with --demo, off otherwise)")
+                        help="built-in arm gestures (wave, handshake…) chosen by Claude (default: on with --demo, off otherwise)")
+    parser.add_argument("--talk-gestures", action="store_true",
+                        help="small continuous arm motion while speaking, via rt/arm_sdk (robot must be in walk mode)")
+    parser.add_argument("--asr", choices=("whisper", "robot"), default="whisper",
+                        help="speech recognition: Whisper on this laptop's GPU from the robot mic (default), "
+                             "or the G1's built-in ASR")
+    parser.add_argument("--asr-lang", choices=("auto", "en"), default="auto",
+                        help="Whisper language: auto-detect English/Chinese/Spanish (default), or English only "
+                             "(try this if accented English comes out as Chinese)")
     args = parser.parse_args()
     interface = args.interface
     gestures = args.demo if args.gestures is None else args.gestures
     print(f"[{ROBOT_NAME}] using network interface: {interface}"
-          f"  (demo={args.demo}, gestures={gestures})")
+          f"  (demo={args.demo}, gestures={gestures}, talk_gestures={args.talk_gestures}, asr={args.asr})")
 
     print(f"[{ROBOT_NAME}] loading web context...")
     web_context = load_context()
@@ -834,7 +929,9 @@ def main():
 
     ChannelFactoryInitialize(0, interface)
 
-    bot = SB01ConversationLoop(interface, web_context, demo=args.demo, gestures=gestures)
+    bot = SB01ConversationLoop(interface, web_context, demo=args.demo, gestures=gestures,
+                               talk_gestures=args.talk_gestures, asr=args.asr,
+                               asr_lang=None if args.asr_lang == "auto" else args.asr_lang)
     bot.setup()
     bot.run()
 

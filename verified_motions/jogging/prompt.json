@@ -1,0 +1,10 @@
+{
+  "prompt": "jogging",
+  "num_samples": 1,
+  "selected_candidate": "0_out.npy",
+  "temperature": 0.9,
+  "top_k": 50,
+  "top_p": 0.95,
+  "generator_checkpoint": "epoch=489.ckpt",
+  "note": "single-sample generation (num_samples=1), no best-of-N scoring/selection was run"
+}

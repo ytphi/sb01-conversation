@@ -5,8 +5,8 @@ import_course_zip.py  -  pull course documents out of a Google Drive export for 
 Extracts only the files Yotie's knowledge base can read (.pdf .pptx .docx .xlsx) into
 memory/course_files/, keeping the Drive folder layout. Skips 3D models, videos, student
 records (rosters, sign-ups, progress sheets — see COURSE_FILE_EXCLUDE in
-teleop/knowledge_base.py), and readings already in memory/papers/.
-Yotie re-indexes on its next start.
+sb01/knowledge_base.py), and readings already in memory/papers/.
+The index is rebuilt right away, so sb01's next start is instant.
 
 Usage:
   python3 scripts/import_course_zip.py ~/Downloads/IST5930_Fall2026-*.zip
@@ -17,7 +17,8 @@ import sys
 import zipfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from teleop.knowledge_base import COURSE_FILES_DIR, COURSE_FILE_TYPES, COURSE_FILE_EXCLUDE, MEMORY_DIR
+from sb01.knowledge_base import (COURSE_FILES_DIR, COURSE_FILE_TYPES, COURSE_FILE_EXCLUDE,
+                                   MEMORY_DIR, KnowledgeBase)
 
 SKIP_DIRS = ("3D Models/", "/video/")
 
@@ -49,7 +50,8 @@ def main():
                 with z.open(info) as src, open(out, "wb") as dst:
                     dst.write(src.read())
                 print(f"extracted: {os.path.relpath(out, dest)}")
-    print(f"\ndone → {dest}  (Yotie re-indexes on next start)")
+    print(f"\nextracted → {dest}\nbuilding Yotie's index now, so sb01 starts instantly...")
+    KnowledgeBase()
 
 
 if __name__ == "__main__":

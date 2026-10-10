@@ -23,26 +23,18 @@ memory/papers/
 memory/course_files/
 memory/.knowledge_cache.pkl
 
-# Teleoperation / GMR scripts (separate from conversation demo)
-scripts/teleop_session.py
-scripts/train_gmr.py
-scripts/adapter.py
-scripts/check_robot.py
-scripts/bvh_to_g1.py
-scripts/fbx_to_g1.py
-scripts/qtm_bvh_to_g1.py
-scripts/vis_episode.py
-scripts/robot.yaml
-teleop/gmr/
-teleop/gmr.py
-teleop/gmr_retarget.py
-teleop/qtm_stream.py
-teleop/retarget.py
-teleop/robot_control.py
-teleop/live_viewer.py
-
-# Recorded episodes
+# Teleop lives in its own repo (ytphi/g1-qtm-teleop); keep strays out
+teleop/
 record/
+episodes/
+
+# Network captures, backups, local editor settings
+*.pcap
+.cyclonedds-home*/
+*.orig
+*.pre-*
+scripts/.vscode/
+sb01/.vscode/
 
 # Editor / OS
 .DS_Store
@@ -50,3 +42,6 @@ record/
 
 # Team 1 traffic captures (never commit)
 data/traffic/
+
+# Local Claude Code permissions
+.claude/settings.local.json

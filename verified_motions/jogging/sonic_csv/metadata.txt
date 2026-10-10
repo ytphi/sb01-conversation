@@ -1,0 +1,7 @@
+Metadata for: live
+==============================
+
+Body part indexes:
+[0]
+
+Total timesteps: 96

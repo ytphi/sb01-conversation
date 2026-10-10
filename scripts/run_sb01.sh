@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Launcher for the sb01 conversation loop.
-# Runs sb01_conversation.py inside the dedicated `unitree/env` venv with the
-# project's Cyclone DDS C library on LD_LIBRARY_PATH (required by cyclonedds
-# at import time). Any extra args are passed through to the script.
+# Runs sb01_conversation.py inside the `unitree/env310` venv (Python 3.10 +
+# the official cyclonedds 0.10.2 wheel, which bundles its own C library).
+# The old `unitree/env` (Python 3.12, cyclonedds built from source against
+# .cyclonedds-home) can't create DDS topics: DDS_RETCODE_PRECONDITION_NOT_MET.
+# Any extra args are passed through to the script.
 #
 #   sb01                  demo mode (visitor persona + arm gestures)
 #   sb01 --no-gestures    demo mode, arms stay still (fallback)
@@ -14,15 +16,10 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$SELF")" && pwd)"
 G1_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VENV_PY="/home/aloha/robotics/platforms/unitree/env/bin/python3"
-CYCLONEDDS_LIB="$G1_ROOT/.cyclonedds-home/lib"
+VENV_PY="/home/aloha/robotics/platforms/unitree/env310/bin/python"
 
 if [[ ! -x "$VENV_PY" ]]; then
     echo "error: venv python not found at $VENV_PY" >&2
-    exit 1
-fi
-if [[ ! -d "$CYCLONEDDS_LIB" ]]; then
-    echo "error: Cyclone DDS lib dir not found at $CYCLONEDDS_LIB" >&2
     exit 1
 fi
 
@@ -35,5 +32,4 @@ done
 [[ $DEMO -eq 1 ]] && ARGS=(--demo "${ARGS[@]}")
 
 cd "$SCRIPT_DIR"
-exec env LD_LIBRARY_PATH="$CYCLONEDDS_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    "$VENV_PY" sb01_conversation.py "${ARGS[@]}"
+exec env -u LD_LIBRARY_PATH "$VENV_PY" sb01_conversation.py "${ARGS[@]}"

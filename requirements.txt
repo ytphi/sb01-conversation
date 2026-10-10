@@ -1,24 +1,20 @@
 # Unitree G1 SDK
 cyclonedds==0.10.2
 
-# QTM real-time streaming
-qtm-rt
-
 # Retargeting
 numpy
 scipy
 scikit-learn
 joblib
-pin  # pinocchio (if installing via pip; prefer conda-forge for full bindings)
-
-# Data recording
-h5py
 
 # Robot camera
 opencv-python
 
 # sb01 conversation: local knowledge base (lecture/paper/CV PDFs)
 pypdf
+
+# Talk gestures: joint limits + safety filter from the teleop repo
+qtm-teleop-g1 @ git+https://github.com/ytphi/g1-qtm-teleop.git
 
 # Config
 pyyaml

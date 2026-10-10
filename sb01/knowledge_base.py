@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import pickle
 import re
@@ -19,20 +20,34 @@ NOTE_SOURCES = [
 NOTE_EXCLUDE = {
     "2024Fall IST5930.md",                 # a different course (LLM security)
     "Fall2026 IST5930 Logistics Prep.md",  # instructor to-do list
+    "Lab 4 — How Yotie Remembers People (Canvas).md",  # draft; Lab 4 not decided yet
 }
 # Course files exported from Google Drive (slides, lab docs, schedule sheets), searched
 # recursively. Class-only like the notes: they can mention students.
 COURSE_FILES_DIR = os.path.join(MEMORY_DIR, "course_files")
-COURSE_FILE_TYPES = (".pdf", ".pptx", ".docx", ".xlsx")
+COURSE_FILE_TYPES = (".pdf", ".pptx", ".docx", ".xlsx", ".md")
+# Final Canvas pages (as posted to students) go in course_files/Canvas/ as .md. A final can
+# name the Obsidian draft it supersedes in frontmatter ("replaces: <draft filename>.md");
+# that draft is then left out of the index.
+CANVAS_FINAL_DIR = os.path.join(COURSE_FILES_DIR, "Canvas")
 # Never index student records, even if a full Drive export is dropped in.
 COURSE_FILE_EXCLUDE = ("Lab Sheets", "Volunteer_Signup", "Signup", "Roster", "Grades", "Attendance",
                        "IST5930_2026_Template")
-INDEX_VERSION = 4   # bump to force a rebuild when indexing logic changes
+# Course files with no student names: also searchable in demo mode (visitors). Slide decks,
+# lab docs and the Obsidian pages include team rosters, so they stay class-only.
+COURSE_FILE_PUBLIC = ("/Reading/", "CourseSchedule", "CSUSB_IST5930_Fall2026.docx")
+INDEX_VERSION = 9   # bump to force a rebuild when indexing logic changes
 
 CHUNK_SIZE = 900
 CHUNK_OVERLAP = 150
+# Markdown sections (one Canvas team deliverable, one lab step) stay whole up to this size,
+# so a deliverables list isn't cut in half.
+NOTE_CHUNK_SIZE = 1600
 TOP_K = 3
 MIN_SCORE = 0.12
+
+# pypdf logs harmless "could not convert string to float" warnings for oddly formatted PDFs
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 try:
     from pypdf import PdfReader
@@ -60,15 +75,40 @@ except ImportError:
 # "week 7" / "Lab 4" / "Team 3" → "week7" / "lab4" / "team3", in both the index and the
 # query. Otherwise the tokenizer drops the lone digit and every lab page looks the same.
 # Underscores become spaces first, so file titles like "Lab2_..._Team 3" split into words.
-_NUMBERED = re.compile(r"\b(week|lab|lecture|module|lesson|team|group)\s*[-#]?\s*(\d+)\b", re.IGNORECASE)
-_NUMBERED_TERM = re.compile(r"(week|lab|lecture|module|lesson|team|group)\d+")
+# Speech-to-text often spells numbers out ("week seven"), so number words count too.
+_NUMBER_WORDS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+    "fifteen sixteen seventeen eighteen nineteen twenty".split())}
+_NUMBERED = re.compile(r"\b(week|lab|lecture|module|lesson|team|group)\s*[-#]?\s*(\d+|"
+                       + "|".join(_NUMBER_WORDS) + r")\b", re.IGNORECASE)
+_NUMBERED_TERM = re.compile(r"(?:week|lab|lecture|module|lesson|team|group)\d+")
 
 
 def _preprocess(text: str) -> str:
-    return _NUMBERED.sub(lambda m: f"{m.group(1)}{m.group(2)}", text.lower().replace("_", " "))
+    return _NUMBERED.sub(lambda m: f"{m.group(1)}{_NUMBER_WORDS.get(m.group(2), m.group(2))}",
+                         text.lower().replace("_", " "))
+
+
+def _title_terms(chunk: dict) -> list[str]:
+    """Numbered terms in a chunk's file title / section label (e.g. the 'Week7' deck, the
+    'Week 7 10/05' schedule row) — the chunk is *about* that week, not just mentioning it."""
+    return sorted(set(_NUMBERED_TERM.findall(_preprocess(f"{chunk['source']} {chunk.get('section', '')}"))))
+
+
+def _replaced_drafts() -> set[str]:
+    """Draft filenames named in Canvas finals' frontmatter ('replaces: …')."""
+    replaced = set()
+    for path in glob.glob(os.path.join(CANVAS_FINAL_DIR, "*.md")):
+        with open(path, encoding="utf-8") as f:
+            head = f.read(2000)
+        m = re.match(r"---\n(.*?)\n---\n", head, re.DOTALL)
+        if m:
+            replaced.update(v.strip() for v in re.findall(r"^replaces:\s*(.+)$", m.group(1), re.MULTILINE))
+    return replaced
 
 
 def _note_paths() -> list[str]:
+    replaced = _replaced_drafts()
     paths = []
     for src in NOTE_SOURCES:
         src = os.path.expanduser(src)
@@ -76,7 +116,7 @@ def _note_paths() -> list[str]:
             paths.extend(sorted(glob.glob(os.path.join(src, "*.md"))))
         elif os.path.isfile(src):
             paths.append(src)
-    return [p for p in paths if os.path.basename(p) not in NOTE_EXCLUDE]
+    return [p for p in paths if os.path.basename(p) not in NOTE_EXCLUDE | replaced]
 
 
 def _clean_markdown(text: str) -> str:
@@ -128,11 +168,11 @@ def _chunk_note(path: str) -> list[dict]:
         label = title if heading == title else f"{title} — {heading}"
         start = 0
         while start < len(body):
-            piece = body[start:start + CHUNK_SIZE].strip()
+            piece = body[start:start + NOTE_CHUNK_SIZE].strip()
             if piece:
                 chunks.append({"source": title, "section": heading, "kind": "note",
                                "text": f"{label}: {piece}"})
-            start += CHUNK_SIZE - CHUNK_OVERLAP
+            start += NOTE_CHUNK_SIZE - CHUNK_OVERLAP
     return chunks
 
 
@@ -142,7 +182,7 @@ def _course_file_paths() -> list[str]:
         name = os.path.basename(path)
         if (path.lower().endswith(COURSE_FILE_TYPES) and not name.startswith("~$")
                 and not any(x.lower() in name.lower() for x in COURSE_FILE_EXCLUDE)):
-            if path.lower().endswith(".pdf") or _OFFICE_AVAILABLE:
+            if path.lower().endswith((".pdf", ".md")) or _OFFICE_AVAILABLE:
                 paths.append(path)
     return paths
 
@@ -188,7 +228,8 @@ def _extract_units(path: str) -> list[tuple[str, str]]:
                         header = cells
                         continue
                     pairs = [f"{h}: {c}" if h else c for h, c in zip(header, cells) if c]
-                    units.append((f"{ws.title} row {r}", " | ".join(pairs)))
+                    label = cells[0][:40] if cells[0] else f"row {r}"   # e.g. "Week 7 10/05"
+                    units.append((f"{ws.title}: {label}", " | ".join(pairs)))
             return units
     except Exception as exc:
         print(f"[knowledge_base] could not read {os.path.basename(path)}: {exc}")
@@ -199,6 +240,7 @@ def _chunk_course_file(path: str) -> list[dict]:
     """Chunk a course file; each chunk starts with 'file title — location:' so the title
     words (e.g. 'Week5') are searchable."""
     title = os.path.splitext(os.path.basename(path))[0]
+    kind = "public" if any(p in path for p in COURSE_FILE_PUBLIC) else "note"
     chunks = []
     for loc, raw in _extract_units(path):
         text = re.sub(r"\s+", " ", raw).strip()
@@ -206,7 +248,7 @@ def _chunk_course_file(path: str) -> list[dict]:
         while start < len(text):
             piece = text[start:start + CHUNK_SIZE].strip()
             if piece:
-                chunks.append({"source": title, "section": loc, "kind": "note",
+                chunks.append({"source": title, "section": loc, "kind": kind,
                                "text": f"{title} — {loc}: {piece}"})
             start += CHUNK_SIZE - CHUNK_OVERLAP
     return chunks
@@ -265,7 +307,9 @@ class KnowledgeBase:
             self._load_or_build()
 
     def _fingerprint(self, paths: list[str]):
-        return [INDEX_VERSION] + sorted(
+        # scikit-learn version included: a pickled vectorizer from another version can break
+        import sklearn
+        return [INDEX_VERSION, sklearn.__version__] + sorted(
             (os.path.basename(p), os.path.getmtime(p), os.path.getsize(p))
             for p in paths
         )
@@ -293,7 +337,8 @@ class KnowledgeBase:
                 print(f"[knowledge_base] cache load failed, rebuilding: {exc}")
 
         print(f"[knowledge_base] indexing {len(pdf_paths)} PDFs + {len(note_paths)} course notes + "
-              f"{len(course_paths)} course files (first run may take a bit)...")
+              f"{len(course_paths)} course files — files changed, rebuilding the index "
+              f"(~30s, don't interrupt; next start is instant)...")
         chunks = []
         for path in pdf_paths:
             pages = _extract_pages(path)
@@ -302,11 +347,16 @@ class KnowledgeBase:
             chunks.extend(_chunk_note(path))
         for path in course_paths:
             print(f"[knowledge_base]   {os.path.basename(path)}")
-            chunks.extend(_chunk_course_file(path))
+            chunks.extend(_chunk_note(path) if path.endswith(".md") else _chunk_course_file(path))
 
         if not chunks:
             print("[knowledge_base] no extractable text found")
             return
+        finals = {os.path.splitext(os.path.basename(p))[0] for p in course_paths
+                  if os.path.dirname(p) == CANVAS_FINAL_DIR}
+        for c in chunks:
+            c["title_terms"] = _title_terms(c)
+            c["canvas_final"] = c["source"] in finals
 
         vectorizer = TfidfVectorizer(stop_words="english", max_df=0.9, preprocessor=_preprocess)
         matrix = vectorizer.fit_transform([c["text"] for c in chunks])
@@ -330,8 +380,9 @@ class KnowledgeBase:
                  include_notes: bool = True) -> str:
         """Return the top-k relevant snippets for `query`, or '' if nothing is relevant.
 
-        include_notes=False skips the markdown course notes (they name students, so
-        they're for class use, not visitor demos).
+        include_notes=False skips class-only material — the Obsidian pages, slide decks and
+        lab docs name students — leaving PDFs, readings, the schedule and course description
+        (for visitor demos).
 
         Requires at least 2 shared vocabulary terms (not just a high cosine score) so a
         single rare word in common — e.g. a place name that also appears in a paper's
@@ -341,8 +392,9 @@ class KnowledgeBase:
         to chunks containing it, and that one term is enough. Otherwise "what did we learn
         in week 3?" shares only "week3" with the Week 3 slides and gets filtered out. Pinned
         results rank chunks matching more numbered terms first (Team 3 + Lab 2 beats either
-        alone), take at most 2 per file, and return one extra snippet, so the schedule row
-        for that week isn't crowded out by one slide deck.
+        alone), then final Canvas pages (the official version), then chunks whose title/section *is* that week (the Week 7 deck, the "Week 7"
+        schedule row) above passing mentions; at most 2 per file, two extra snippets, so the
+        schedule row for that week isn't crowded out by one slide deck.
         """
         if not self.available or self.matrix is None or not query.strip():
             return ""
@@ -359,9 +411,12 @@ class KnowledgeBase:
                 if _NUMBERED_TERM.fullmatch(t) and t in self.vectorizer.vocabulary_]
         per_source = k
         if cols:
+            numbered = {t for t in query_terms if _NUMBERED_TERM.fullmatch(t)}
             n_terms = np.asarray((self.matrix[:, cols] > 0).sum(axis=1)).ravel()
-            scores = np.where(n_terms > 0, scores + n_terms, -1.0)
-            min_shared, min_score, k, per_source = 1, 0.0, k + 1, 2
+            in_title = np.array([len(numbered.intersection(c.get("title_terms", ()))) for c in self.chunks])
+            official = np.array([0.5 if c.get("canvas_final") else 0.0 for c in self.chunks])
+            scores = np.where(n_terms > 0, scores + n_terms + in_title + official, -1.0)
+            min_shared, min_score, k, per_source = 1, 0.0, k + 2, 2
 
         # over-fetch, then filter
         top_idx = scores.argsort()[::-1][:k * 10]
@@ -375,7 +430,7 @@ class KnowledgeBase:
             shared = query_terms & set(analyzer(c["text"]))
             if len(shared) < min_shared:
                 continue
-            where = f"{c['source']} › {c['section']}" if c.get("kind") == "note" else f"{c['source']}, p.{c['page']}"
+            where = f"{c['source']} › {c['section']}" if "section" in c else f"{c['source']}, p.{c['page']}"
             if where in seen or from_source.get(c["source"], 0) >= per_source:
                 continue           # overlapping window of the same slide/page, or file at its cap
             seen.add(where)

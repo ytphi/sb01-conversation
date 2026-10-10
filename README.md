@@ -40,8 +40,8 @@ Reboot when prompted. This gives you Ubuntu inside Windows. Open the **Ubuntu** 
 ### Step 3 — Clone and run setup
 
 ```bash
-git clone https://github.com/ytphi/sb01-conversation.git
-cd sb01-conversation
+git clone https://github.com/ytphi/g1-sb01.git
+cd g1-sb01
 bash setup.sh
 ```
 
@@ -131,9 +131,12 @@ scripts/
 ├── sb01_conversation.py   ← main conversation loop
 └── enroll_face.py         ← register a face for recognition
 
-teleop/
+sb01/
 ├── face_id.py             ← camera-based face recognition
-└── memory_manager.py      ← per-person profiles & session summaries
+├── memory_manager.py      ← per-person profiles & session summaries
+├── knowledge_base.py      ← local course/paper search (TF-IDF)
+├── talk_gestures.py       ← arm gestures while speaking (safety filter from g1-qtm-teleop)
+└── whisper_asr.py         ← Whisper speech recognition
 
 memory/
 ├── faces/                 ← put face photos here (name.jpg)

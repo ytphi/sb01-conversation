@@ -13,18 +13,23 @@
 - **Robot:** Unitree G1 humanoid (sb01)
 - **Network interface:** `eno0` (Ethernet, 192.168.123.222) → G1 DDS
 - **WiFi interface:** `wlp0s20f3` → internet / Claude API
-- **Working directory:** `/home/aloha/robotics/platforms/unitree/g1`
+- **Working directory:** `/home/aloha/robotics/platforms/unitree/g1/g1-sb01`
 - **Python SDK path:** `unitree_sdk2_python/`
-- **C++ SDK path:** `../unitree_sdk2/`
+- **C++ SDK path:** `../../unitree_sdk2/`
 
 ## Key Scripts
 | Script | Purpose |
 |---|---|
 | `scripts/sb01_conversation.py` | LLM voice conversation loop (Claude + edge-tts) |
-| `scripts/teleop_session.py` | MoCap teleoperation session |
-| `scripts/train_gmr.py` | Train GMR retargeting model |
-| `scripts/adapter.py` | QTM → G1 joint adapter |
+| `scripts/run_sb01.sh` | Launcher for the conversation loop (env310) |
+| `scripts/preview_talk_gestures.py` | Preview talk gestures in MuJoCo |
+| `scripts/g1_mujoco_mirror.py` / `run_g1_mirror.sh` | Live MuJoCo mirror of the robot |
+| `scripts/g1_rviz_bridge.py` / `run_g1_rviz.sh` | RViz bridge |
 | `scripts/check_robot.py` | Connection and status check |
+
+Conversation modules live in `sb01/` (face_id, memory_manager, knowledge_base, talk_gestures, whisper_asr).
+MoCap teleop moved to its own repo, `../g1-qtm-teleop` (installed editable in env310/texedo310);
+`sb01/talk_gestures.py` imports its `teleop.safety.SafetyFilter` and joint limits from there.
 
 ## DDS Patterns
 ```python
@@ -62,20 +67,20 @@ python3 unitree_sdk2_python/example/wireless_controller/wireless_controller.py e
 ```
 
 ## C++ SDK Reference
-> Source: `../unitree_sdk2/README.md`
+> Source: `../../unitree_sdk2/README.md`
 
 **Build:**
 ```bash
-cd ../unitree_sdk2 && mkdir -p build && cd build
+cd ../../unitree_sdk2 && mkdir -p build && cd build
 cmake .. && make
-# binaries output to: ../unitree_sdk2/bin/
+# binaries output to: ../../unitree_sdk2/bin/
 ```
 
 **Run C++ examples:**
 ```bash
-../unitree_sdk2/bin/g1_ankle_swing_example eno0
-../unitree_sdk2/bin/g1_arm5_sdk_dds_example eno0
-../unitree_sdk2/bin/g1_arm7_sdk_dds_example eno0
+../../unitree_sdk2/bin/g1_ankle_swing_example eno0
+../../unitree_sdk2/bin/g1_arm5_sdk_dds_example eno0
+../../unitree_sdk2/bin/g1_arm7_sdk_dds_example eno0
 ```
 
 ## G1 Joint Index (arm7 layout)
