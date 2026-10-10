@@ -98,6 +98,11 @@ THINKING_POSE_SECONDS = 6.0   # longest the pose is held if the reply is slow
 # With the Chatterbox voice the pose also covers the seconds it takes to
 # synthesize the reply, so it may be held this long before the arms go back.
 THINKING_POSE_VOICE_SECONDS = 20.0
+# How the name is spelled for the English Chatterbox voice so that it is said
+# "yoh-dee" (the voice reads "Yotie" as "yah-dee"). SB01_NAME_SPOKEN_AS sets
+# another spelling; SB01_NAME_SPOKEN_AS=Yotie leaves the name as written.
+NAME_SPOKEN_AS = os.environ.get("SB01_NAME_SPOKEN_AS", "Yohdee").strip()
+_NAME_WRITTEN = re.compile(r"(?<![A-Za-z0-9])" + re.escape(ROBOT_NAME) + r"(?![A-Za-z0-9])", re.IGNORECASE)
 # The Chatterbox voice is given the "warm" tone (warmer and about 5 dB louder,
 # see teleop/voice_chatterbox.py) unless SB01_CHATTERBOX_TONE=plain is set.
 VOICE_TONE_DEFAULT = "warm"
@@ -356,6 +361,13 @@ def heard_own_name(text: str) -> bool:
 def say_own_name(text: str) -> str:
     """A reply with every variant of the robot's name replaced by ROBOT_NAME."""
     return NAME_SPOKEN_WRONG.sub(ROBOT_NAME, text)
+
+
+def name_for_the_voice(text: str) -> str:
+    """The text as it is handed to the English Chatterbox voice, which reads
+    "Yotie" as "yah-dee": the name is respelled so it is said "yoh-dee". Only
+    what the voice reads changes; the name on screen and in Claude's text stays."""
+    return _NAME_WRITTEN.sub(NAME_SPOKEN_AS, text) if NAME_SPOKEN_AS else text
 
 
 # ── language ──────────────────────────────────────────────────────────────────
@@ -673,7 +685,10 @@ class SB01ConversationLoop:
         try:
             # With teaching gestures on, sentences are synthesized one by one so
             # each one's start time is measured; word times within it are estimates.
-            speech = self.voice.synthesize(text, self._speech_language(text, language),
+            spoken_in = self._speech_language(text, language)
+            if spoken_in == "en":
+                text = name_for_the_voice(text)
+            speech = self.voice.synthesize(text, spoken_in,
                                            split=GESTURE_CUES, gesture_audio=bool(self.gestures))
         except VoiceUnavailable as exc:
             self._voice_failures += 1
