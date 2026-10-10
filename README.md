@@ -8,7 +8,7 @@ A voice-driven conversation system for the **Unitree G1 humanoid robot** (nickna
 
 Click the image below to watch the video on YouTube.
 
-[![SB01 Demo](https://img.youtube.com/vi/R4tsqcWj8_U/0.jpg)](https://youtu.be/R4tsqcWj8_U?si=sJ4VN0mgyzGZyRys)
+[![SB01 Demo](https://img.youtube.com/vi/hs-tSX8WWxQ/0.jpg)](https://youtu.be/hs-tSX8WWxQ)
 
 ---
 
